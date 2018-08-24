@@ -1,10 +1,13 @@
-﻿-- Prevent tainting global _.
+﻿if LibDebug then LibDebug() end
+-- Prevent tainting global _.
 local _
 local _G = _G
 
 
 local function CopyTable(SrcTable)
-	local TarTable = {};
+	local TarTable = {}
+	local type = type
+	local pairs = pairs
 	for sKey, sValue in pairs(SrcTable) do
 		if type(sValue) == "table" then
 			TarTable[sKey] = {};

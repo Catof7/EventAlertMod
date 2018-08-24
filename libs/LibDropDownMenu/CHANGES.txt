@@ -1,0 +1,12 @@
+tag 77ebb77349e0e0e61811f1c57deab62a2b025c5f r5
+Author:	Hizuro <hizuro@gmx.net>
+Date:	Sat Jul 21 15:08:24 2018 +0200
+
+Tagging as r5
+
+commit ace6fea479482737760e4f21fa6bbe731d20f23e
+Author: Hizuro <hizuro@gmx.net>
+Date:   Sat Jul 21 15:08:06 2018 +0200
+
+    fix little problem with a fontstring
+

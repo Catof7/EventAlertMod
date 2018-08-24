@@ -1,3 +1,4 @@
+if LibDebug then LibDebug() end
 --EA_Config2 改為初始預設值
 EA_Config2 = 	{
 		

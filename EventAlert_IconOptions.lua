@@ -1,3 +1,4 @@
+if LibDebug then LibDebug() end
 -- Prevent tainting global _.
 local _
 local _G = _G

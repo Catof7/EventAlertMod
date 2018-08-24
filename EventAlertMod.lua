@@ -1,19 +1,35 @@
--- Prevent tainting global _.
+if LibDebug then LibDebug() end
+--[[------------------------------------------------------------------
+Prevent tainting global _
+--------------------------------------------------------------------]]
 local _
 local _G = _G
+--[[------------------------------------------------------------------
+--------------------------------------------------------------------]]
+local AddonName,AddonTable = ... 
+local G = AddonTable
 
---常用函數設為區域變數以提昇效能
+--[[------------------------------------------------------------------
+常用函數設為區域變數以提昇效能
+--------------------------------------------------------------------]]
 local print = print
 local pairs = pairs
 local ipairs = ipairs
 local tonumber = tonumber
 local tostring = tostring
 local type = type
+local table = table
 local select = select
+local collectgarbage = collectgarbage
+local tinsert = table.insert
+local tsort = table.sort
 local format = format
+local strsplit = strsplit
+local strfind = strfind
+local strmatch = strmatch
 local CreateFrame = CreateFrame
 local UnitBuff = UnitBuff
-local UnitDebuf = UnitDebuff
+local UnitDebuff = UnitDebuff
 local UnitAura = UnitAura
 local UnitPower = UnitPower
 local UnitPowerMax = UnitPowerMax
@@ -21,16 +37,20 @@ local UnitPowerType = UnitPowerType
 local UnitAffectingCombat = UnitAffectingCombat
 local UnitLevel = UnitLevel
 local UnitClass = UnitClass
-local UnitID = UnitID
 local UnitSpellHaste = UnitSpellHaste
 local UnitName = UnitName
 local UnitIsCorpse = UnitIsCorpse
 local UnitIsDeadOrGhost = UnitIsDeadOrGhost
 local UnitIsEnemy = UnitIsEnemy
+local UnitInRaid = UnitInRaid
+local UnitInParty = UnitInParty
+local UnitHealth = UnitHealth
+local UnitHealthMax = UnitHealthMax
 local UnitExists = UnitExists
 local GetTime = GetTime
 local GetActiveSpecGroup = GetActiveSpecGroup
-local GetActiveTalentGroup = GetActiveTalentGroup
+local GetItemSpell = GetItemSpell 
+local GetItemCooldown = GetItemCooldown
 local GetShapeshiftForm = GetShapeshiftForm
 local GetShapeshiftFormID = GetShapeshiftFormID
 local GetSpecialization = GetSpecialization
@@ -40,23 +60,48 @@ local GetSpellCooldown = GetSpellCooldown
 local GetSpellInfo = GetSpellInfo
 local GetSpellLink = GetSpellLink
 local GetSpellTexture = GetSpellTexture
+local GetTotemInfo = GetTotemInfo
 local GetNumSubgroupMembers = GetNumSubgroupMembers
 local hooksecurefunc = hooksecurefunc
 local IsUsableSpell = IsUsableSpell
 local UIFrameFadeIn = UIFrameFadeIn
 local UIFrameFadeOut = UIFrameFadeOut
+local UIParent = UIParent
 local GameTooltip = GameTooltip
------------------------------------------------------------------
+local RegisterAllEvents = RegisterAllEvents
+local RegisterEvent = RegisterEvent
+local PlaySoundFile = PlaySoundFile
+
+--[[------------------------------------------------------------------
+--------------------------------------------------------------------]]
 local EA_LISTSEC_SELF = 0;
 local EA_LISTSEC_TARGET = 0;
 local EA_SPEC_expirationTime1 = 0;
 local EA_SPEC_expirationTime2 = 0;
 
------------------------------------------------------------------
+--[[------------------------------------------------------------------
+--------------------------------------------------------------------]]
 local EA_FormType_FirstTimeCheck = true;
 local EA_ADDONS_NAME = "EventAlertMod";
------------------------------------------------------------------
-local LibAura = LibStub:GetLibrary("LibAuraUtil-1.0")
+
+--[[------------------------------------------------------------------
+For OnUpdate Using, only Gloabal Var.
+--------------------------------------------------------------------]]
+EventAlert_UpdateInterval 			= 0.1; --Second
+EventAlert_TimeSinceUpdate_Self 	= 0;
+EventAlert_TimeSinceUpdate_Target 	= 0;
+EventAlert_TimeSinceUpdate_SCD 		= 0;
+EventAlert_TimeSinceUpdate_Focus 	= 0;
+EventAlert_TimeSinceUpdate_PetFocus	= 0;
+EventAlert_TimeSinceUpdate_Runes 	= 0;
+EventAlert_TimeSinceUpdate_LifeBloom= 0;
+
+--[[------------------------------------------------------------------
+--------------------------------------------------------------------]]
+EventAlert_DEBUG = {};
+
+--[[------------------------------------------------------------------
+--------------------------------------------------------------------]]		
 local function EAFun_GetSpellItemEnable(EAItems)
 	local SpellEnable = false;
 	if (EAItems ~= nil) then
@@ -64,7 +109,9 @@ local function EAFun_GetSpellItemEnable(EAItems)
 	end
 	return SpellEnable;
 end		
------------------------------------------------------------------		
+
+--[[------------------------------------------------------------------
+--------------------------------------------------------------------]]
 local function EAFun_CheckSpellConditionMatch(EA_count, EA_unitCaster, EAItems)
 	local ifAdd_buffCur, orderWtd = true, 1;
 	local SC_Stack, SC_Self = 1, false;
@@ -87,8 +134,9 @@ local function EAFun_CheckSpellConditionMatch(EA_count, EA_unitCaster, EAItems)
 	
 	return ifAdd_buffCur, orderWtd;
 end	
------------------------------------------------------------------		
--- The first event of this UI(Event sequence : "Onload"->"ADDON_LOADED")
+--[[------------------------------------------------------------------
+The first event of this UI(Event sequence : "Onload"->"ADDON_LOADED")
+--------------------------------------------------------------------]]
 function EventAlert_OnLoad(self)
 	
 	-- To register events from 'EA_EventList' function array.
@@ -105,13 +153,20 @@ function EventAlert_OnLoad(self)
 
 	--Next Event : ADDON_LOADED
 end
------------------------------------------------------------------
+
+--[[------------------------------------------------------------------
+--------------------------------------------------------------------]]
 function EventAlert_OnEvent(self, event, ...)
 		
 		local func = EA_EventList[event]
-		if type(func) == "function" then if event:match("COMBAT_LOG_EVENT") then func(self,event,CombatLogGetCurrentEventInfo()) else func(self,event,...) end end
+		if type(func) == "function" then 			
+			func(self,event,...)
+		end
 end
---If 'OnLoad' event had loaded, then excute this 'ADDON_LOADED' event.
+
+--[[------------------------------------------------------------------
+If 'OnLoad' event had loaded, then excute this 'ADDON_LOADED' event.
+--------------------------------------------------------------------]]
 function EventAlert_ADDON_LOADED(self, event, ...)
 
 	local arg1,arg2 = ...;
@@ -142,33 +197,42 @@ function EventAlert_ADDON_LOADED(self, event, ...)
 		
 		EventAlert_Options_Init();
 		EventAlert_Icon_Options_Frame_Init();
-		-- EventAlert_Class_Events_Frame_Init();
-		-- EventAlert_Other_Events_Frame_Init();
-		-- EventAlert_Target_Events_Frame_Init();
-		-- EventAlert_SCD_Events_Frame_Init();
-		-- EventAlert_Group_Events_Frame_Init();
+		--[[
+		EventAlert_Class_Events_Frame_Init();
+		EventAlert_Other_Events_Frame_Init();
+		EventAlert_Target_Events_Frame_Init();
+		EventAlert_SCD_Events_Frame_Init();
+		EventAlert_Group_Events_Frame_Init();
+		]]
 		EventAlert_CreateFrames();
 		EAFun_HookTooltips();
 	end
 end
------------------------------------------------------------------
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EventAlert_InitSlashCommand()
 	SlashCmdList["EVENTALERTMOD"] = EventAlert_SlashHandler;
 	SLASH_EVENTALERTMOD1 = "/eventalertmod";
 	SLASH_EVENTALERTMOD2 = "/eam";
 end
------------------------------------------------------------------
-function EventAlert_InitArray()
-	EA_SPELLINFO_SELF = {};
-	EA_SPELLINFO_TARGET = {};
 
-	EA_CurrentBuffs = {};
-	EA_TarCurrentBuffs = {};
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
+function EventAlert_InitArray()
+	EA_SPELLINFO_SELF = {}
+	EA_SPELLINFO_TARGET = {}
+	EA_CurrentBuffs = {}
+	EA_TarCurrentBuffs = {}
 	localizedPlayerClass,EA_playerClass = UnitClass("player")
 end
------------------------------------------------------------------
-function EventAlert_InitArrayConfig()
-			
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
+function EventAlert_InitArrayConfig()			
 	
 	local function init1_2() 
 		if EA_Config.AlertSound == nil then EA_Config.AlertSound = "Sound\\Spells\\ShaysBell.ogg" end;
@@ -186,7 +250,11 @@ function EventAlert_InitArrayConfig()
 		if EA_Config.AllowESC == nil then EA_Config.AllowESC = false end;
 		if EA_Config.AllowAltAlerts == nil then EA_Config.AllowAltAlerts = false end;
 		if EA_Config.Target_MyDebuff == nil then EA_Config.Target_MyDebuff = true end;
+		
+		if EA_Config.NewLineByIconCount == nil then EA_Config.NewLineByIconCount = 0 end;
 	end
+	
+	
 	
 	
 	--若存檔(EA_Config)無紀錄,就從預設值(EA_Config2)複製一份
@@ -196,23 +264,8 @@ function EventAlert_InitArrayConfig()
 		end
 	end	
 	
-	
 	init1_2()
-	
-	
-	if EA_Config.EA_SPELL_ITEM == nil then
-		EA_Config.EA_SPELL_ITEM = {}
-		--[[ 使用本地缓存来替代查询 注意每次版本更新后记到更新
-		local s
-		for i = 1,999999 do
-			s = select(2,GetItemSpell(i))
-			if s then
-				EA_Config.EA_SPELL_ITEM[s] = i
-			end
-		end
-		--]]
-	end
-	
+	EventAlert_CreateSpellItemCache()
 	
 	
 	if (EA_Config.ChangeTimer == true) then								--若計時顯示在框架內
@@ -233,7 +286,10 @@ function EventAlert_InitArrayConfig()
 	
 	
 end
------------------------------------------------------------------
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EventAlert_InitArrayPosition()
 	if EA_Position.Anchor == nil then EA_Position.Anchor = "CENTER" end;
 	if EA_Position.relativePoint == nil then EA_Position.relativePoint = "CENTER" end;
@@ -255,7 +311,10 @@ function EventAlert_InitArrayPosition()
 	if EA_Position.PlayerLv2BOSS == nil then EA_Position.PlayerLv2BOSS = true end;
 	if EA_Position.SCD_UseCooldown == nil then EA_Position.SCD_UseCooldown = false end;
 end
------------------------------------------------------------------
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EventAlert_InitArrayPos()
 	if EA_Pos == nil then EA_Pos = { } end;
 	if EA_Pos[EA_CLASS_DK] == nil then EA_Pos[EA_CLASS_DK] = EA_Position end;
@@ -271,7 +330,10 @@ function EventAlert_InitArrayPos()
 	if EA_Pos[EA_CLASS_MONK] == nil then EA_Pos[EA_CLASS_MONK] = EA_Position end;
 	if EA_Pos[EA_CLASS_DEMONHUNTER] == nil then EA_Pos[EA_CLASS_DEMONHUNTER] = EA_Position end;
 end
------------------------------------------------------------------
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EventAlert_InitArraySpecCheckPower()
 			
 	if EA_Config.SpecPowerCheck == nil then EA_Config.SpecPowerCheck = {} end						
@@ -279,17 +341,52 @@ function EventAlert_InitArraySpecCheckPower()
 		if EA_Config.SpecPowerCheck[k] == nil then EA_Config.SpecPowerCheck[k] = false end
 	end
 end
------------------------------------------------------------------
+
+function EventAlert_CreateSpellItemCache(flagRenew)	
+	
+	local EA_SPELL_ITEM = EA_Config.EA_SPELL_ITEM 
+	local DoesItemExistByID = C_Item.DoesItemExistByID
+	local GetItemSpell = GetItemSpell
+	
+	--如果未建立過快取則建立快取
+	--如果flagRenew傳入true 則強迫重建快取
+	if EA_SPELL_ITEM then 
+		if not(flagRenew) then 			
+			return
+		end			
+	end
+	
+	EA_SPELL_ITEM = {}	
+	for i = 1 , 999999 do 		
+		if DoesItemExistByID(i) then
+			--GetItemSpell()頗為耗時,故先以C_Item.DoesItemExistByID(i)過濾之
+			local _,s = GetItemSpell(i) 	
+			if s then 			
+				EA_SPELL_ITEM[s] = EA_SPELL_ITEM[s] or i
+			end
+		end
+	end
+	collectgarbage()
+end
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EventAlert_PLAYER_ENTER_COMBAT(self, event, ...)
 	ShowAllScdCurrentBuff()	
 end
------------------------------------------------------------------
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EventAlert_PLAYER_LEAVE_COMBAT(self, event, ...)
 	if EA_Config.SCD_NocombatStillKeep == false then
 		HideAllScdCurrentBuff()
 	end
 end
------------------------------------------------------------------
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EventAlert_PLAYER_ENTERING_WORLD(self, event, ...)
 
 		EventAlert_PlayerSpecPower_Update()
@@ -315,12 +412,20 @@ function EventAlert_PLAYER_ENTERING_WORLD(self, event, ...)
 		end
 
 		EA_ClassAltSpellName = { };
+		local tonumber = tonumber
+		local DoesSpellExist = C_Spell.DoesSpellExist
+		local GetSpellInfo = GetSpellInfo 
 		for i,v in pairs(EA_AltItems[EA_playerClass]) do
-			local name= GetSpellInfo(i);
-			EA_ClassAltSpellName[name] = tonumber(i);
+			if DoesSpellExist(i) then
+				local name = GetSpellInfo(i)
+				EA_ClassAltSpellName[name] = tonumber(i)
+			end
 		end
 end
------------------------------------------------------------------
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EventAlert_TARGET_CHANGED(self, event, ...)
 	EventAlert_TarChange_ClearFrame();
 	if UnitName("player") ~= UnitName("target") then
@@ -332,27 +437,36 @@ function EventAlert_TARGET_CHANGED(self, event, ...)
 		EventAlert_CheckExecution();
 	end
 end
-function EventAlert_UNIT_SPELLCAST_CAST(self,event,...)
-	--print(...)
-end
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
+
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EventAlert_UNIT_SPELLCAST_SUCCEEDED(self,event,...)
 	
-	local unitCaster,spellName,spellID = ...
+	local unitCaster,spellName,_,_,spellID = ...
 	local surName = UnitName(unitCaster)	
 	EventAlert_ScdBuffs_Update(surName, spellName, spellID)
 end
 
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EventAlert_COMBAT_LOG_EVENT_UNFILTERED(self, event, ...)
 	-- WOW 4.1
 	-- local timestp, event, hideCaster, surGUID, surName, surFlags, dstGUID, dstName, dstFlags, spellID, spellName = ...;
 	-- WOW 4.2
 	--for i,v in ipairs({...}) do print(i,v) end
 	
-	local timestp, event, hideCaster, surGUID, surName, surFlags, surRaidFlags, dstGUID, dstName, dstFlags, dstRaidFlags, spellID, spellName = ...;
+	local timestp, event, hideCaster, surGUID, surName, surFlags, surRaidFlags, dstGUID, dstName, dstFlags, dstRaidFlags, spellID, spellName = CombatLogGetCurrentEventInfo();
 	
 	local f = EA_EventList_COMBAT_LOG_EVENT_UNFILTERED[event]
 	
-	if type(f)=="function" then f(...) end
+	if type(f)=="function" then f(CombatLogGetCurrentEventInfo()) end
 			
 	
 	spellID = tonumber(spellID);
@@ -360,12 +474,8 @@ function EventAlert_COMBAT_LOG_EVENT_UNFILTERED(self, event, ...)
 
 	if ((spellID ~= nil) and (spellID > 0 and spellID < 1000000)) then
 		-- "/ea showc" will also display in this function
-
-		if (event == "UNIT_CAST_SUCCESS") then
-			EA_IfPrint(EA_DEBUGFLAG601,event,surName,dstName,spellID,spellName)
-		end
 		
-		EventAlert_ScdBuffs_Update(surName, spellName, spellID, timestp); -- WOW 4.1 Change with spellID
+		EventAlert_ScdBuffs_Update(surName, spellName, spellID, timestp) -- WOW 4.1 Change with spellID
 
 		local iUnitPower = UnitPower("player", 8);
 		if (EA_playerClass == EA_CLASS_DRUID and EA_Config.SpecPowerCheck.LifeBloom and EA_SpecPower.LifeBloom.has and iUnitPower == 0) then
@@ -389,19 +499,29 @@ function EventAlert_COMBAT_LOG_EVENT_UNFILTERED(self, event, ...)
 		end
 	end
 end
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EventAlert_COMBAT_LOG_EVENT_SPELL_AURA_REFRESH(...)
-		local timestp, event, hideCaster, surGUID, surName, surFlags, surRaidFlags, dstGUID, dstName, dstFlags, dstRaidFlags, spellID, spellName = ...;				
-		EventAlert_ScdBuffs_Update(surName, spellName, spellID,timestp )		
+	local timestp, event, hideCaster, surGUID, surName, surFlags, surRaidFlags, dstGUID, dstName, dstFlags, dstRaidFlags, spellID, spellName = ...
+	EventAlert_Buffs_Update(...)	
 end
 
-function EventAlert_COMBAT_LOG_EVENT_UNIT_CAST_SUCCESS(...)
-		--local timestp, event, hideCaster, surGUID, surName, surFlags, surRaidFlags, dstGUID, dstName, dstFlags, dstRaidFlags, spellID, spellName = ...;				
-		--EventAlert_Buffs_Update(...)	
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
+function EventAlert_COMBAT_LOG_EVENT_SPELL_CAST_SUCCESS(...)
+	local timestp, event, hideCaster, surGUID, surName, surFlags, surRaidFlags, dstGUID, dstName, dstFlags, dstRaidFlags, spellID, spellName = ...			
+	EventAlert_ScdBuffs_Update(surName, spellName, spellID, timestp )
 end
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EventAlert_COMBAT_LOG_EVENT_SPELL_SUMMON(...)		
-		local timestp, event, hideCaster, surGUID, surName, surFlags, surRaidFlags, dstGUID, dstName, dstFlags, dstRaidFlags, spellID, spellName = ...;	
-		
-		EventAlert_Buffs_Update(...)
+	local timestp, event, hideCaster, surGUID, surName, surFlags, surRaidFlags, dstGUID, dstName, dstFlags, dstRaidFlags, spellID, spellName = ...;	
+	EventAlert_Buffs_Update(...)
 		
 		--若 /eam showc 啟用，則也顯示招喚圖騰型法術ID
 		if (EA_DEBUGFLAG3) then
@@ -413,10 +533,18 @@ function EventAlert_COMBAT_LOG_EVENT_SPELL_SUMMON(...)
 			end
 		end
 end
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EventAlert_UNIT_PLAYER_TOTEM_UPDATE(self,event,totemIndex)
 	--print(totemIndex)
 	EventAlert_Buffs_Update()
 end
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EventAlert_UNIT_AURA(self, event, ...)
 	local arg1 = ...		
 	if (arg1 == "player") or (arg1=="pet") then			
@@ -433,7 +561,7 @@ function EventAlert_UNIT_AURA(self, event, ...)
 		EA_FormType_FirstTimeCheck = false;
 	end
 end
---[[
+--[[------------------------------------------------------------------
 function EventAlert_COMBAT_TEXT_UPDATE(self, event, ...)
 	local arg1, arg2 = ...;
 	
@@ -441,66 +569,110 @@ function EventAlert_COMBAT_TEXT_UPDATE(self, event, ...)
 		EventAlert_COMBAT_TEXT_SPELL_ACTIVE(arg2);
 	end
 end
-]]--
+--------------------------------------------------------------------]]
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EventAlert_UNIT_COMBO_POINTS(self, event, ...)
 	if (EA_Config.SpecPowerCheck.ComboPoint and EA_SpecPower.ComboPoint.has) then
 		EventAlert_UpdateComboPoint();
 	end
 end
 
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EventAlert_UNIT_HEALTH(self, event, ...)
 		local arg1 = ...;
 		if arg1 == "target" then
 			EventAlert_CheckExecution();
 		end
 end
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EventAlert_ACTIVE_TALENT_GROUP_CHANGED(self, event, ...)	
 	
 	--EventAlert_PLAYER_ENTERING_WORLD()
 	EventAlert_PlayerSpecPower_Update();	
 	RemoveAllScdCurrentBuff();
 end
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EventAlert_UNIT_DISPLAYPOWER(self, event, ...)
 	EventAlert_PlayerSpecPower_Update()
 	--RemoveAllScdCurrentBuff()
 end
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EventAlert_UPDATE_SHAPESHIFT_FORM(self, event, ...)
 	EventAlert_PlayerSpecPower_Update()
 	--RemoveAllScdCurrentBuff()
 end
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EventAlert_PLAYER_TALENT_UPDATE(self, event, ...)
 	EventAlert_PlayerSpecPower_Update();
 	RemoveAllScdCurrentBuff();
 end
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EventAlert_PLAYER_TALENT_WIPE(self, event, ...)
 	EventAlert_PlayerSpecPower_Update();
 	RemoveAllScdCurrentBuff();
 end
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EventAlert_SPELL_UPDATE_COOLDOWN(self, event, ...)
 	--EventAlert_ScdPositionFrames();	
 	for i,spellID in ipairs(EA_ScdCurrentBuffs) do
 		EventAlert_OnSCDUpdate(spellID)
 	end
 end
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EventAlert_SPELL_UPDATE_CHARGES(self, event, ...)
 	--EventAlert_ScdPositionFrames();
 	for i,spellID in ipairs(EA_ScdCurrentBuffs) do
 		EventAlert_OnSCDUpdate(spellID)
 	end
 end
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EventAlert_RUNE_TYPE_UPDATE(self,event,...)
 	
 	EventAlert_UpdateRunes();
 end
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EventAlert_RUNE_POWER_UPDATE(self,event,...)
 	
 	EventAlert_UpdateRunes();
 end
------------------------------------------------------------------
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EventAlert_UNIT_POWER_UPDATE(self,event,...)
-	local arg1, arg2 = ...;
-	
-	--print(event,arg1,arg2)
+	local arg1, arg2 = ...;		
 	if arg1 == "player" or arg1 == "pet" then
 		
 		for p,tblPower in pairs(EA_SpecPower) do
@@ -521,10 +693,9 @@ function EventAlert_UNIT_POWER_UPDATE(self,event,...)
 	
 end
 
------------------------------------------------------------------
+--[[------------------------------------------------------------------
 
-
------------------------------------------------------------------
+--------------------------------------------------------------------]]
 local function EAFun_CheckSpellConditionOverGrow(EA_count, EAItems)
 	local isOverGrow = false;
 	local SC_OverGrow = 0;
@@ -537,7 +708,10 @@ local function EAFun_CheckSpellConditionOverGrow(EA_count, EAItems)
 	end
 	return isOverGrow;
 end
------------------------------------------------------------------
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 local function EAFun_GetSpellConditionRedSecText(EAItems)
 	local SC_RedSecText = -1;
 	if (EAItems ~= nil) then
@@ -546,15 +720,18 @@ local function EAFun_GetSpellConditionRedSecText(EAItems)
 	end
 	return SC_RedSecText;
 end
------------------------------------------------------------------
-function EventAlert_Buffs_Update(...)
-	
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
+function EventAlert_Buffs_Update(...)	
 	
 	local buffsCurrent = {};
 	local buffsToDelete = {};
 	local SpellEnable, OtherEnable = false, false;
 	local ifAdd_buffCur = false;
 	local orderWtd = 1;
+	
 	-- DEFAULT_CHAT_FRAME:AddMessage("EventAlert_Buffs_Update");
 	-- if (EA_DEBUGFLAG1) then
 	--  DEFAULT_CHAT_FRAME:AddMessage("----"..EA_XCMD_SELFLIST.."----");
@@ -564,10 +741,16 @@ function EventAlert_Buffs_Update(...)
 		CreateFrames_EventsFrame_ClearSpellList(3);
 	end	
 	
-	
+	local tinsert  = table.insert
+	local UnitAura = UnitAura
+	local UnitInRaid = UnitInRaid
+	local UnitInParty = UnitInParty
+	local EA_SPELLINFO_SELF = EA_SPELLINFO_SELF
+	local PlayerItems = EA_Items[EA_playerClass]
+	local OtherItems = EA_Items[EA_CLASS_OTHER]
 	for i=1,40 do
 		
-		local name, icon, count, debuffType, duration, expirationTime, unitCaster, isStealable, nameplateShowPersonal, spellID, canApplyAura, isBossDebuff, _, nameplateShowAll, timeMod, value1, value2, value3 = UnitAura("player", i, "HELPFUL")
+		local name,  icon, count, debuffType, duration, expirationTime, unitCaster, isStealable, nameplateShowPersonal, spellID, canApplyAura, isBossDebuff, _, nameplateShowAll, timeMod, value1, value2, value3 = UnitAura("player", i, "HELPFUL")
 		
 		if (not spellID) then break end
 		if isCastByPlayer then unitCaster = "player" end
@@ -589,21 +772,21 @@ function EventAlert_Buffs_Update(...)
 
 		ifAdd_buffCur = false
 		--spellID = tostring(spellID)
-		SpellEnable = EAFun_GetSpellItemEnable(EA_Items[EA_playerClass][spellID]);
-		OtherEnable = EAFun_GetSpellItemEnable(EA_Items[EA_CLASS_OTHER][spellID]);
+		SpellEnable = EAFun_GetSpellItemEnable(PlayerItems[spellID]);
+		OtherEnable = EAFun_GetSpellItemEnable(OtherItems[spellID]);
 		
 		if (SpellEnable) then
 			-- ifAdd_buffCur = true;
-			ifAdd_buffCur, orderWtd = EAFun_CheckSpellConditionMatch(count, unitCaster, EA_Items[EA_playerClass][spellID])
+			ifAdd_buffCur, orderWtd = EAFun_CheckSpellConditionMatch(count, unitCaster, PlayerItems[spellID])
 		elseif (OtherEnable) then
 			-- ifAdd_buffCur = true;
-			ifAdd_buffCur, orderWtd = EAFun_CheckSpellConditionMatch(count, unitCaster, EA_Items[EA_CLASS_OTHER][spellID])
+			ifAdd_buffCur, orderWtd = EAFun_CheckSpellConditionMatch(count, unitCaster, OtherItems[spellID])
 		elseif (EA_DEBUGFLAG11 or EA_DEBUGFLAG21) then
 			-- ifAdd_buffCur = true;
 			if (EA_LISTSEC_SELF == 0 or (0 < duration and duration <= EA_LISTSEC_SELF)) then
 				-- DEFAULT_CHAT_FRAME:AddMessage("spellID="..spellID.." /unitCaster="..unitCaster);
 				if EA_DEBUGFLAG11 or (EA_DEBUGFLAG21 and (not (UnitInRaid(unitCaster) or UnitInParty(unitCaster)))) then
-					if EA_Items[EA_CLASS_OTHER][spellID] == nil then EA_Items[EA_CLASS_OTHER][spellID] = {enable=true,} end;
+					if OtherItems[spellID] == nil then OtherItems[spellID] = {enable=true,} end;
 					CreateFrames_CreateSpellFrame(spellID, 1);
 					ifAdd_buffCur = true;
 				end
@@ -626,12 +809,12 @@ function EventAlert_Buffs_Update(...)
 			--EA_SPELLINFO_SELF[spellID].value1 = value1;
 			--EA_SPELLINFO_SELF[spellID].value2 = value2;
 			--EA_SPELLINFO_SELF[spellID].value3 = value3;
-			table.insert(buffsCurrent, spellID);
+			tinsert(buffsCurrent, spellID);
 		end
 	end
 	for i=1,40 do
 		
-		name, icon, count, debuffType, duration, expirationTime, unitCaster, isStealable, nameplateShowPersonal, spellID, canApplyAura, isBossDebuff, isCastByPlayer, nameplateShowAll, timeMod, value1, value2, value3 = UnitAura("pet", i, "HELPFUL")
+		name,  icon, count, debuffType, duration, expirationTime, unitCaster, isStealable, nameplateShowPersonal, spellID, canApplyAura, isBossDebuff, isCastByPlayer, nameplateShowAll, timeMod, value1, value2, value3 = UnitAura("pet", i, "HELPFUL")
 		
 		if (not spellID) then break end
 		if isCastByPlayer then unitCaster = "player" end
@@ -652,21 +835,21 @@ function EventAlert_Buffs_Update(...)
 
 		ifAdd_buffCur = false
 		--spellID = tostring(spellID)
-		SpellEnable = EAFun_GetSpellItemEnable(EA_Items[EA_playerClass][spellID]);
-		OtherEnable = EAFun_GetSpellItemEnable(EA_Items[EA_CLASS_OTHER][spellID]);
+		SpellEnable = EAFun_GetSpellItemEnable(PlayerItems[spellID])
+		OtherEnable = EAFun_GetSpellItemEnable(OtherItems[spellID])
 		
 		if (SpellEnable) then
 			-- ifAdd_buffCur = true;
-			ifAdd_buffCur, orderWtd = EAFun_CheckSpellConditionMatch(count, unitCaster, EA_Items[EA_playerClass][spellID])
+			ifAdd_buffCur, orderWtd = EAFun_CheckSpellConditionMatch(count, unitCaster, PlayerItems[spellID])
 		elseif (OtherEnable) then
 			-- ifAdd_buffCur = true;
-			ifAdd_buffCur, orderWtd = EAFun_CheckSpellConditionMatch(count, unitCaster, EA_Items[EA_CLASS_OTHER][spellID])
+			ifAdd_buffCur, orderWtd = EAFun_CheckSpellConditionMatch(count, unitCaster, OtherItems[spellID])
 		elseif (EA_DEBUGFLAG11 or EA_DEBUGFLAG21) then
 			-- ifAdd_buffCur = true;
 			if (EA_LISTSEC_SELF == 0 or (0 < duration and duration <= EA_LISTSEC_SELF)) then
 				-- DEFAULT_CHAT_FRAME:AddMessage("spellID="..spellID.." /unitCaster="..unitCaster);
 				if EA_DEBUGFLAG11 or (EA_DEBUGFLAG21 and (not (UnitInRaid(unitCaster) or UnitInParty(unitCaster)))) then
-					if EA_Items[EA_CLASS_OTHER][spellID] == nil then EA_Items[EA_CLASS_OTHER][spellID] = {enable=true,} end;
+					if OtherItems[spellID] == nil then OtherItems[spellID] = {enable=true,} end;
 					CreateFrames_CreateSpellFrame(spellID, 1);
 					ifAdd_buffCur = true;
 				end
@@ -689,12 +872,12 @@ function EventAlert_Buffs_Update(...)
 			--EA_SPELLINFO_SELF[spellID].value1 = value1;
 			--EA_SPELLINFO_SELF[spellID].value2 = value2;
 			--EA_SPELLINFO_SELF[spellID].value3 = value3;
-			table.insert(buffsCurrent, spellID);
+			tinsert(buffsCurrent, spellID);
 		end
 	end
 
 	for i=41,80 do
-		name, icon, count, debuffType, duration, expirationTime, unitCaster, isStealable, nameplateShowPersonal, spellID, canApplyAura, isBossDebuff, _, nameplateShowAll, timeMod, value1, value2, value3 = UnitAura("player", i-40, "HARMFUL")
+		name,  icon, count, debuffType, duration, expirationTime, unitCaster, isStealable, nameplateShowPersonal, spellID, canApplyAura, isBossDebuff, _, nameplateShowAll, timeMod, value1, value2, value3 = UnitAura("player", i-40, "HARMFUL")
 		
 		if (not spellID) then break end
 		if isCastByPlayer then unitCaster = "player" end
@@ -712,14 +895,14 @@ function EventAlert_Buffs_Update(...)
 
 		ifAdd_buffCur = false
 		--spellID = tostring(spellID)
-		SpellEnable = EAFun_GetSpellItemEnable(EA_Items[EA_playerClass][spellID]);
-		OtherEnable = EAFun_GetSpellItemEnable(EA_Items[EA_CLASS_OTHER][spellID]);
+		SpellEnable = EAFun_GetSpellItemEnable(PlayerItems[spellID])
+		OtherEnable = EAFun_GetSpellItemEnable(OtherItems[spellID])
 		if (SpellEnable) then
 			-- ifAdd_buffCur = true;
-			ifAdd_buffCur, orderWtd = EAFun_CheckSpellConditionMatch(count, unitCaster, EA_Items[EA_playerClass][spellID]);
+			ifAdd_buffCur, orderWtd = EAFun_CheckSpellConditionMatch(count, unitCaster, PlayerItems[spellID])
 		elseif (OtherEnable) then
 			-- ifAdd_buffCur = true;
-			ifAdd_buffCur, orderWtd = EAFun_CheckSpellConditionMatch(count, unitCaster, EA_Items[EA_CLASS_OTHER][spellID]);
+			ifAdd_buffCur, orderWtd = EAFun_CheckSpellConditionMatch(count, unitCaster, OtherItems[spellID])
 			
 			
 			
@@ -728,7 +911,7 @@ function EventAlert_Buffs_Update(...)
 			if (EA_LISTSEC_SELF == 0 or (0 < duration and duration <= EA_LISTSEC_SELF)) then
 				-- DEFAULT_CHAT_FRAME:AddMessage("spellID="..spellID.." /unitCaster="..unitCaster);
 				if EA_DEBUGFLAG11 or (EA_DEBUGFLAG21 and (not (UnitInRaid(unitCaster) or UnitInParty(unitCaster)))) then
-					if EA_Items[EA_CLASS_OTHER][spellID] == nil then EA_Items[EA_CLASS_OTHER][spellID] = {enable=true,} end;
+					if OtherItems[spellID] == nil then OtherItems[spellID] = {enable=true,} end;
 					CreateFrames_CreateSpellFrame(spellID, 1);
 					ifAdd_buffCur = true;
 				end
@@ -737,7 +920,7 @@ function EventAlert_Buffs_Update(...)
 
 		if (ifAdd_buffCur) then
 			-- if EA_SPELLINFO_SELF[spellID] == nil then EA_SPELLINFO_SELF[spellID] = {name, rank, icon, count, duration, expirationTime, unitCaster, isDebuff} end;
-			EA_SPELLINFO_SELF[spellID].name = name;
+			EA_SPELLINFO_SELF[spellID].name = name;			
 			EA_SPELLINFO_SELF[spellID].icon = icon;
 			EA_SPELLINFO_SELF[spellID].count = count;
 			EA_SPELLINFO_SELF[spellID].duration = duration;
@@ -749,13 +932,13 @@ function EventAlert_Buffs_Update(...)
 			--EA_SPELLINFO_SELF[spellID].value1 = value1;
 			--EA_SPELLINFO_SELF[spellID].value2 = value2;
 			--EA_SPELLINFO_SELF[spellID].value3 = value3;
-			table.insert(buffsCurrent, spellID);
+			tinsert(buffsCurrent, spellID);
 		end
 	end
 
 	
 	for i=41,80 do
-		local name, icon, count, debuffType, duration, expirationTime, unitCaster, isStealable, nameplateShowPersonal, spellID, canApplyAura, isBossDebuff, _, nameplateShowAll, timeMod, value1, value2, value3 = UnitAura("pet", i-40, "HARMFUL")
+		local name,  icon, count, debuffType, duration, expirationTime, unitCaster, isStealable, nameplateShowPersonal, spellID, canApplyAura, isBossDebuff, _, nameplateShowAll, timeMod, value1, value2, value3 = UnitAura("pet", i-40, "HARMFUL")
 		
 		if (not spellID) then break end
 		if isCastByPlayer then unitCaster = "player" end
@@ -773,14 +956,14 @@ function EventAlert_Buffs_Update(...)
 
 		ifAdd_buffCur = false
 		--spellID = tostring(spellID)
-		SpellEnable = EAFun_GetSpellItemEnable(EA_Items[EA_playerClass][spellID]);
-		OtherEnable = EAFun_GetSpellItemEnable(EA_Items[EA_CLASS_OTHER][spellID]);
+		SpellEnable = EAFun_GetSpellItemEnable(PlayerItems[spellID]);
+		OtherEnable = EAFun_GetSpellItemEnable(OtherItems[spellID]);
 		if (SpellEnable) then
 			-- ifAdd_buffCur = true;
-			ifAdd_buffCur, orderWtd = EAFun_CheckSpellConditionMatch(count, unitCaster, EA_Items[EA_playerClass][spellID]);
+			ifAdd_buffCur, orderWtd = EAFun_CheckSpellConditionMatch(count, unitCaster, PlayerItems[spellID]);
 		elseif (OtherEnable) then
 			-- ifAdd_buffCur = true;
-			ifAdd_buffCur, orderWtd = EAFun_CheckSpellConditionMatch(count, unitCaster, EA_Items[EA_CLASS_OTHER][spellID]);
+			ifAdd_buffCur, orderWtd = EAFun_CheckSpellConditionMatch(count, unitCaster, OtherItems[spellID]);
 			
 			
 			
@@ -789,7 +972,7 @@ function EventAlert_Buffs_Update(...)
 			if (EA_LISTSEC_SELF == 0 or (0 < duration and duration <= EA_LISTSEC_SELF)) then
 				-- DEFAULT_CHAT_FRAME:AddMessage("spellID="..spellID.." /unitCaster="..unitCaster);
 				if EA_DEBUGFLAG11 or (EA_DEBUGFLAG21 and (not (UnitInRaid(unitCaster) or UnitInParty(unitCaster)))) then
-					if EA_Items[EA_CLASS_OTHER][spellID] == nil then EA_Items[EA_CLASS_OTHER][spellID] = {enable=true,} end;
+					if OtherItems[spellID] == nil then OtherItems[spellID] = {enable=true,} end;
 					CreateFrames_CreateSpellFrame(spellID, 1);
 					ifAdd_buffCur = true;
 				end
@@ -798,19 +981,20 @@ function EventAlert_Buffs_Update(...)
 
 		if (ifAdd_buffCur) then
 			-- if EA_SPELLINFO_SELF[spellID] == nil then EA_SPELLINFO_SELF[spellID] = {name, rank, icon, count, duration, expirationTime, unitCaster, isDebuff} end;
-			EA_SPELLINFO_SELF[spellID].name = name;
-			EA_SPELLINFO_SELF[spellID].icon = icon;
-			EA_SPELLINFO_SELF[spellID].count = count;
-			EA_SPELLINFO_SELF[spellID].duration = duration;
-			EA_SPELLINFO_SELF[spellID].expirationTime = expirationTime;
-			EA_SPELLINFO_SELF[spellID].unitCaster = unitCaster;
-			EA_SPELLINFO_SELF[spellID].isDebuff = true;
-			EA_SPELLINFO_SELF[spellID].orderWtd = orderWtd;
+			EA_SPELLINFO_SELF[spellID].name = name
+			
+			EA_SPELLINFO_SELF[spellID].icon = icon
+			EA_SPELLINFO_SELF[spellID].count = count
+			EA_SPELLINFO_SELF[spellID].duration = duration
+			EA_SPELLINFO_SELF[spellID].expirationTime = expirationTime
+			EA_SPELLINFO_SELF[spellID].unitCaster = unitCaster
+			EA_SPELLINFO_SELF[spellID].isDebuff = true
+			EA_SPELLINFO_SELF[spellID].orderWtd = orderWtd
 			EA_SPELLINFO_SELF[spellID].value = {value1, value2, value3}
 			--EA_SPELLINFO_SELF[spellID].value1 = value1;
 			--EA_SPELLINFO_SELF[spellID].value2 = value2;
 			--EA_SPELLINFO_SELF[spellID].value3 = value3;
-			table.insert(buffsCurrent, spellID);
+			tinsert(buffsCurrent, spellID);
 		end
 	end
 	
@@ -818,54 +1002,54 @@ function EventAlert_Buffs_Update(...)
 	--針對圖騰類法術進行偵測（如力之符文、屈心魔、邪DK華爾琪）
 	local timestp, event, hideCaster, surGUID, surName, surFlags, surRaidFlags, dstGUID, dstName, dstFlags, dstRaidFlags, spellID, spellName = ...
 	
+	local GetTotemInfo = GetTotemInfo
 	local count = 1
-	local unitCaster = "player"
-	
-	for t=1,4 do			
+	local unitCaster = "player"	
+	for t = 1, 4 do			
 		local haveTotem,TotemName, TotemStart, TotemDuration, TotemIcon = GetTotemInfo(t)			
-		ifAdd_buffCur = false	
-		SpellEnable = EAFun_GetSpellItemEnable(EA_Items[EA_playerClass][spellID]);			
-			
+		ifAdd_buffCur = false
+
+		SpellEnable = EAFun_GetSpellItemEnable(PlayerItems[spellID])			
 		if (SpellEnable) then			
-			ifAdd_buffCur, orderWtd = EAFun_CheckSpellConditionMatch(count, unitCaster, EA_Items[EA_playerClass][spellID]);			
+			ifAdd_buffCur, orderWtd = EAFun_CheckSpellConditionMatch(count, unitCaster, PlayerItems[spellID])	
 		end
 			
 		if (ifAdd_buffCur) then
 			if haveTotem then
 				if event == "SPELL_SUMMON" then 					
 					EA_SPELLINFO_SELF[spellID].name = spellName
-					EA_SPELLINFO_SELF[spellID].icon = TotemIcon;
-					EA_SPELLINFO_SELF[spellID].count = count;
-					EA_SPELLINFO_SELF[spellID].duration = TotemDuration;							
-					EA_SPELLINFO_SELF[spellID].expirationTime = TotemStart + TotemDuration;
-					EA_SPELLINFO_SELF[spellID].unitCaster = unitCaster;
-					EA_SPELLINFO_SELF[spellID].isDebuff = false;
-					EA_SPELLINFO_SELF[spellID].orderWtd = orderWtd;			
+					EA_SPELLINFO_SELF[spellID].icon = TotemIcon
+					EA_SPELLINFO_SELF[spellID].count = count
+					EA_SPELLINFO_SELF[spellID].duration = TotemDuration
+					EA_SPELLINFO_SELF[spellID].expirationTime = TotemStart + TotemDuration
+					EA_SPELLINFO_SELF[spellID].unitCaster = unitCaster
+					EA_SPELLINFO_SELF[spellID].isDebuff = false
+					EA_SPELLINFO_SELF[spellID].orderWtd = orderWtd
 					EA_SPELLINFO_SELF[spellID].totem = t
 				end
 				
-				table.insert(buffsCurrent, spellID);			
+				tinsert(buffsCurrent, spellID);			
 			end
 		end
 	end
+	
 	
 	for i,s in pairs(EA_CurrentBuffs) do 		
 		
 		if EA_SPELLINFO_SELF[s] then 		
 			local t = EA_SPELLINFO_SELF[s].totem 			
 			if t and t > 0 then	
-				local haveTotem,TotemName, TotemStart, TotemDuration, TotemIcon = GetTotemInfo(t)
+				local haveTotem, TotemName, TotemStart, TotemDuration, TotemIcon = GetTotemInfo(t)
 				if haveTotem and GetTime() < EA_SPELLINFO_SELF[s].expirationTime then			
-					table.insert(buffsCurrent, s)
+					tinsert(buffsCurrent, s)
 				else
 					EA_SPELLINFO_SELF[s].totem = nil
-					table.insert(buffsToDelete, s)
+					tinsert(buffsToDelete, s)
 				end			
 			end
 		end		
-	end
+	end	
 	
-	--end
 	--[[
 	-- Check: Buff dropped
 	local v1 = table.foreach(EA_CurrentBuffs,
@@ -894,17 +1078,17 @@ function EventAlert_Buffs_Update(...)
 	)
 	]]--
 	
-	-- Check: Buff dropped
+	-- Check: Buff dropped	
 	local v = table.foreach(EA_CurrentBuffs,
-		function(i, v1)
-			-- DEFAULT_CHAT_FRAME:AddMessage("buff-check: "..i.." id: "..v1);
-			SpellEnable = false;
-			SpellEnable = EAFun_GetSpellItemEnable(EA_AltItems[EA_playerClass][v1]);
-			
-			if (not SpellEnable) then				
-				local v3 = table.foreach(buffsCurrent,					
+		function(i, v1)		
+			--DEFAULT_CHAT_FRAME:AddMessage("buff-check: "..i.." id: "..v1);
+			local SpellEnable = false
+			local OtherEnable = false			
+			SpellEnable = EAFun_GetSpellItemEnable(PlayerItems[v1])	
+			OtherEnable = EAFun_GetSpellItemEnable(OtherItems[v1])			
+			if (SpellEnable) or (OtherEnable) then				
+				local v3 = table.foreach(buffsCurrent,						
 					function(k, v2)							
-						
 						if (v1==v2)  then							
 							return v2
 						end
@@ -912,9 +1096,8 @@ function EventAlert_Buffs_Update(...)
 				)
 				
 				if(not v3) then					
-					-- Buff dropped
-					
-					table.insert(buffsToDelete, v1)					
+					-- Buff dropped					
+					tinsert(buffsToDelete, v1)					
 				end			
 				
 			end
@@ -922,7 +1105,7 @@ function EventAlert_Buffs_Update(...)
 	)
 	-- Drop Buffs
 	table.foreach(buffsToDelete,
-		function(i, v)
+		function(i, v)			
 			-- DEFAULT_CHAT_FRAME:AddMessage("buff-dropped: id: "..v);			
 			EventAlert_Buff_Dropped(v);
 		end
@@ -931,26 +1114,30 @@ function EventAlert_Buffs_Update(...)
 	-- Check: Buff applied
 	local v1 = table.foreach(buffsCurrent,
 		function(i, v1)
+			
 			local v2 = table.foreach(EA_CurrentBuffs,
 				function(k, v2)
 					if (v1==v2) then
-						return v2;
+						return v2
 					end
 				end
 			)
 			if(not v2) then
 				-- Buff applied
-				EventAlert_Buff_Applied(v1);
+				EventAlert_Buff_Applied(v1)
 			end
 		end
 	)
-	EventAlert_PositionFrames();
+	EventAlert_PositionFrames()
 
 	if (EA_DEBUGFLAG11 or EA_DEBUGFLAG21) then
-		CreateFrames_EventsFrame_RefreshSpellList(3);
+		CreateFrames_EventsFrame_RefreshSpellList(3)
 	end
 end
------------------------------------------------------------------
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EventAlert_TarBuffs_Update(...)
 	local arg1=...
 	local buffsCurrent = {};
@@ -962,10 +1149,15 @@ function EventAlert_TarBuffs_Update(...)
 	-- if (EA_DEBUGFLAG2) then
 	--  DEFAULT_CHAT_FRAME:AddMessage("--------"..EA_XCMD_TARGETLIST.."--------");
 	-- end
-
+	local tinsert = table.insert
+	local UnitAura = UnitAura
+	local EA_SPELLINFO_TARGET = EA_SPELLINFO_TARGET
+	local TarItems = EA_TarItems[EA_playerClass]
+	local OtherItems = EA_Items[EA_CLASS_OTHER]
+	
 	for i=1,40 do
 		--name, rank, icon, count, debuffType, duration, expirationTime, unitCaster, isStealable, shouldConsolidate, spellID , canApplyAura, isBossDebuff, value1, value2, value3= UnitDebuff("target", i)
-		local name, icon, count, debuffType, duration, expirationTime, unitCaster, isStealable, nameplateShowPersonal, spellID, canApplyAura, isBossDebuff, isCastByPlayer, nameplateShowAll, timeMod, value1, value2, value3 = UnitAura("target", i, "HARMFUL")
+		local name,  icon, count, debuffType, duration, expirationTime, unitCaster, isStealable, nameplateShowPersonal, spellID, canApplyAura, isBossDebuff, isCastByPlayer, nameplateShowAll, timeMod, value1, value2, value3 = UnitAura("target", i, "HARMFUL")
 			
 		if (not spellID) then break end
 		
@@ -982,39 +1174,40 @@ function EventAlert_TarBuffs_Update(...)
 
 		ifAdd_buffCur = false;
 		--spellID = tostring(spellID)
-		SpellEnable = EAFun_GetSpellItemEnable(EA_TarItems[EA_playerClass][spellID]);
-		OtherEnable = EAFun_GetSpellItemEnable(EA_Items[EA_CLASS_OTHER][spellID]);
+		SpellEnable = EAFun_GetSpellItemEnable(TarItems[spellID]);
+		OtherEnable = EAFun_GetSpellItemEnable(OtherItems[spellID]);
 				
 		if (SpellEnable) then			
-			ifAdd_buffCur, orderWtd = EAFun_CheckSpellConditionMatch(count, unitCaster, EA_TarItems[EA_playerClass][spellID])	
+			ifAdd_buffCur, orderWtd = EAFun_CheckSpellConditionMatch(count, unitCaster, TarItems[spellID])	
 			
 		elseif (OtherEnable) then
 			-- ifAdd_buffCur = true;
-			ifAdd_buffCur, orderWtd = EAFun_CheckSpellConditionMatch(count, unitCaster, EA_Items[EA_CLASS_OTHER][spellID])	
+			ifAdd_buffCur, orderWtd = EAFun_CheckSpellConditionMatch(count, unitCaster, OtherItems[spellID])	
 			
 		end 
 		
 		if (ifAdd_buffCur) then
 				if EA_SPELLINFO_TARGET[spellID] == nil then EA_SPELLINFO_TARGET[spellID] = {name,  icon, count, duration, expirationTime, unitCaster, isDebuff} end;
-				EA_SPELLINFO_TARGET[spellID].name = name;
-				EA_SPELLINFO_TARGET[spellID].icon = icon;
+				EA_SPELLINFO_TARGET[spellID].name = name
+				
+				EA_SPELLINFO_TARGET[spellID].icon = icon
 				EA_SPELLINFO_TARGET[spellID].count = count;
-				EA_SPELLINFO_TARGET[spellID].duration = duration;
-				EA_SPELLINFO_TARGET[spellID].expirationTime = expirationTime;
-				EA_SPELLINFO_TARGET[spellID].unitCaster = unitCaster;
-				EA_SPELLINFO_TARGET[spellID].isDebuff = true;
-				EA_SPELLINFO_TARGET[spellID].orderWtd = orderWtd;
+				EA_SPELLINFO_TARGET[spellID].duration = duration
+				EA_SPELLINFO_TARGET[spellID].expirationTime = expirationTime
+				EA_SPELLINFO_TARGET[spellID].unitCaster = unitCaster
+				EA_SPELLINFO_TARGET[spellID].isDebuff = true
+				EA_SPELLINFO_TARGET[spellID].orderWtd = orderWtd
 				EA_SPELLINFO_TARGET[spellID].value = {value1,value2,value3}
 				--EA_SPELLINFO_TARGET[spellID].value1 = value1;
 				--EA_SPELLINFO_TARGET[spellID].value2 = value2;
 				--EA_SPELLINFO_TARGET[spellID].value3 = value3;				
-				table.insert(buffsCurrent, spellID);
+				tinsert(buffsCurrent, spellID)
 		end		
 	end
 
 	for i=41,80 do
 		--name, rank, icon, count, debuffType, duration, expirationTime, unitCaster, isStealable, shouldConsolidate, spellID, canApplyAura, isBossDebuff, value1, value2, value3= UnitBuff("target", i-40)
-		name, icon, count, debuffType, duration, expirationTime, unitCaster, isStealable, nameplateShowPersonal, spellID, canApplyAura, isBossDebuff, isCastByPlayer, nameplateShowAll, timeMod, value1, value2, value3 = UnitAura("target", i-40, "HELPFUL")
+		name,  icon, count, debuffType, duration, expirationTime, unitCaster, isStealable, nameplateShowPersonal, spellID, canApplyAura, isBossDebuff, isCastByPlayer, nameplateShowAll, timeMod, value1, value2, value3 = UnitAura("target", i-40, "HELPFUL")
 		
 		if (not spellID) then break end
 		
@@ -1033,34 +1226,35 @@ function EventAlert_TarBuffs_Update(...)
 
 		ifAdd_buffCur = false
 		--spellID = tostring(spellID)
-		SpellEnable = EAFun_GetSpellItemEnable(EA_TarItems[EA_playerClass][spellID]);
-		OtherEnable = EAFun_GetSpellItemEnable(EA_Items[EA_CLASS_OTHER][spellID]);
+		SpellEnable = EAFun_GetSpellItemEnable(TarItems[spellID])
+		OtherEnable = EAFun_GetSpellItemEnable(OtherItems[spellID])
 		
 		if (SpellEnable) then			
-			ifAdd_buffCur, orderWtd = EAFun_CheckSpellConditionMatch(count, unitCaster, EA_TarItems[EA_playerClass][spellID]);
+			ifAdd_buffCur, orderWtd = EAFun_CheckSpellConditionMatch(count, unitCaster, TarItems[spellID]);
 			
 		elseif (OtherEnable) then
 			-- ifAdd_buffCur = true;
 			
-			ifAdd_buffCur, orderWtd = EAFun_CheckSpellConditionMatch(count, unitCaster, EA_Items[EA_CLASS_OTHER][spellID])			
+			ifAdd_buffCur, orderWtd = EAFun_CheckSpellConditionMatch(count, unitCaster, OtherItems[spellID])			
 			
 		end 
 		if (ifAdd_buffCur) then
 				if EA_SPELLINFO_TARGET[spellID] == nil then EA_SPELLINFO_TARGET[spellID] = {name,  icon, count, duration, expirationTime, unitCaster, isDebuff} end;
-				EA_SPELLINFO_TARGET[spellID].name = name;
-				EA_SPELLINFO_TARGET[spellID].icon = icon;
+				EA_SPELLINFO_TARGET[spellID].name = name
 				
-				EA_SPELLINFO_TARGET[spellID].count = count;
-				EA_SPELLINFO_TARGET[spellID].duration = duration;
-				EA_SPELLINFO_TARGET[spellID].expirationTime = expirationTime;
-				EA_SPELLINFO_TARGET[spellID].unitCaster = unitCaster;
-				EA_SPELLINFO_TARGET[spellID].isDebuff = false;
-				EA_SPELLINFO_TARGET[spellID].orderWtd = orderWtd;
+				EA_SPELLINFO_TARGET[spellID].icon = icon
+				
+				EA_SPELLINFO_TARGET[spellID].count = count
+				EA_SPELLINFO_TARGET[spellID].duration = duration
+				EA_SPELLINFO_TARGET[spellID].expirationTime = expirationTime
+				EA_SPELLINFO_TARGET[spellID].unitCaster = unitCaster
+				EA_SPELLINFO_TARGET[spellID].isDebuff = false
+				EA_SPELLINFO_TARGET[spellID].orderWtd = orderWtd
 				EA_SPELLINFO_TARGET[spellID].value = {value1,value2,value3}
 				--EA_SPELLINFO_TARGET[spellID].value1 = value1;
 				--EA_SPELLINFO_TARGET[spellID].value2 = value2;
 				--EA_SPELLINFO_TARGET[spellID].value3 = value3;
-				table.insert(buffsCurrent, spellID);
+				tinsert(buffsCurrent, spellID)
 		end
 end
 
@@ -1072,14 +1266,14 @@ end
 				function(k, v2)
 					-- DEFAULT_CHAT_FRAME:AddMessage("=== buff-check: "..i.." /v2 id: "..v1);
 					if (v1==v2) then
-						return v2;
+						return v2
 					end
 				end
 			)
 			if(not v2) then
 				-- Buff dropped
 				-- DEFAULT_CHAT_FRAME:AddMessage("=== add to Delete /v1 id: "..v1);
-				table.insert(buffsToDelete, v1);
+				tinsert(buffsToDelete, v1)
 			end
 		end
 	)
@@ -1112,19 +1306,26 @@ end
 	
 	EventAlert_TarPositionFrames();
 end
------------------------------------------------------------------
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EventAlert_TarChange_ClearFrame()
 	local ibuff = #EA_TarCurrentBuffs;
 	for i=1,ibuff do
 		EventAlert_TarBuff_Dropped(EA_TarCurrentBuffs[1]);
 	end
 end
------------------------------------------------------------------
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EventAlert_ScdBuffs_Update(EA_Unit, EA_SpellName, EA_spellID, EA_timestp)
-		local spellID = tonumber(EA_spellID);
-		local sSpellLink = "";
-		local SpellEnable = false;
+		local spellID = tonumber(EA_spellID)
+		local sSpellLink = ""
+		local SpellEnable = false
 		
+		local ScdItems = EA_ScdItems[EA_playerClass]
 		-- DEFAULT_CHAT_FRAME:AddMessage("spellID="..spellID.." / EA_SpellName="..EA_SpellName);
 		-- DEFAULT_CHAT_FRAME:AddMessage("EA_Unit="..EA_Unit);
 		if ((EA_Unit == UnitName("player") or (EA_Unit == UnitName("pet"))) and (spellID ~= 0)) then
@@ -1141,7 +1342,7 @@ function EventAlert_ScdBuffs_Update(EA_Unit, EA_SpellName, EA_spellID, EA_timest
 			--if (spellID==47666 or spellID==47750) then spellID=47540 end;   -- Priest Penance
 			--if (spellID==73921 or spellID==98887) then spellID=73920 end;   -- Shaman Healing Rain
 			--if (spellID==61391) then spellID=50516 end;   			-- Druid Typhoon
-			SpellEnable = EAFun_GetSpellItemEnable(EA_ScdItems[EA_playerClass][spellID]);
+			SpellEnable = EAFun_GetSpellItemEnable(ScdItems[spellID]);
 			if (SpellEnable) then
 				-- DEFAULT_CHAT_FRAME:AddMessage("spellID="..spellID.." / EA_ScdItems[EA_playerClass][spellID]=true");
 				local strspellID = tostring(spellID);
@@ -1177,18 +1378,29 @@ function EventAlert_ScdBuffs_Update(EA_Unit, EA_SpellName, EA_spellID, EA_timest
 						eaf:SetWidth(EA_Config.IconSize);
 						eaf:SetHeight(EA_Config.IconSize);
 						eaf:SetAlpha(1);
-						eaf:SetScript("OnUpdate", function()
-							EventAlert_OnSCDUpdate(spellID);
-						end);
+						
+						eaf:SetScript("OnUpdate", function(self,elapsedTime)
+							EventAlert_TimeSinceUpdate_SCD = EventAlert_TimeSinceUpdate_SCD + elapsedTime
+							if EventAlert_TimeSinceUpdate_SCD > EventAlert_UpdateInterval then
+								
+								EventAlert_OnSCDUpdate(spellID)
+								EventAlert_TimeSinceUpdate_SCD = 0
+							end
+						end)
+						
 					end
 					EventAlert_ScdPositionFrames();
 				end
 			end
 		end
 end
------------------------------------------------------------------
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EventAlert_Buff_Dropped(spellID)
 	-- DEFAULT_CHAT_FRAME:AddMessage("buff-dropping: id: "..spellID);
+	
 	local eaf = _G["EAFrame_"..spellID];
 	if eaf~= nil then
 		FrameGlowShowOrHide(eaf,false)
@@ -1200,43 +1412,57 @@ function EventAlert_Buff_Dropped(spellID)
 	removeBuffValue(EA_CurrentBuffs, spellID);
 	EventAlert_PositionFrames();
 end
------------------------------------------------------------------
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EventAlert_Buff_Applied(spellID)
 	-- DEFAULT_CHAT_FRAME:AddMessage("buff-applying: id: "..spellID);
-	table.insert(EA_CurrentBuffs, spellID);
+	tinsert(EA_CurrentBuffs, spellID);
 	EventAlert_PositionFrames();
 	EventAlert_DoAlert();
 end
------------------------------------------------------------------
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EventAlert_TarBuff_Dropped(spellID)
-	-- DEFAULT_CHAT_FRAME:AddMessage("buff-dropping: id: "..spellID);
-	local eaf = _G["EATarFrame_"..spellID];
-	if eaf~= nil then
+	-- DEFAULT_CHAT_FRAME:AddMessage("buff-dropping: id: "..spellID)
+	local eaf = _G["EATarFrame_"..spellID]
+	if eaf ~= nil then
 		FrameGlowShowOrHide(eaf,false)
-		--EA_ActionButton_HideOverlayGlow(eaf);
-		--eaf.overgrow = false;
-		eaf:Hide();
-		eaf:SetScript("OnUpdate", nil);
+		--EA_ActionButton_HideOverlayGlow(eaf)
+		--eaf.overgrow = false
+		eaf:Hide()
+		eaf:SetScript("OnUpdate", nil)
 	end
-	removeBuffValue(EA_TarCurrentBuffs, spellID);
-	EventAlert_TarPositionFrames();
+	removeBuffValue(EA_TarCurrentBuffs, spellID)
+	EventAlert_TarPositionFrames()
 end
------------------------------------------------------------------
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EventAlert_TarBuff_Applied(spellID)
 	-- DEFAULT_CHAT_FRAME:AddMessage("buff-applying: id: "..spellID);
-	table.insert(EA_TarCurrentBuffs, spellID);
-	EventAlert_TarPositionFrames();
+	tinsert(EA_TarCurrentBuffs, spellID)
+	EventAlert_TarPositionFrames()
 end
------------------------------------------------------------------
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EventAlert_SPELL_UPDATE_USABLE()
-	
-	local SpellEnable = false;
+	local tonumber = tonumber
+	local IsUsableSpell = IsUsableSpell	
+	local EA_CurrentBuffs = EA_CurrentBuffs
+	local AltItems = EA_AltItems[EA_playerClass]
+	local SpellEnable = false
 	if (EA_Config.AllowAltAlerts==true) then
 		-- DEFAULT_CHAT_FRAME:AddMessage("spell-active: "..spellName);
 		-- searching for the spell-id, because we only get the name of the spell
-		for s,v in pairs(EA_AltItems[EA_playerClass]) do
-			
-			spellID = tonumber(s);
+		for s,v in pairs(AltItems) do
+			spellID = tonumber(s)
 			SpellEnable = v.enable
 			
 			local v2 = table.foreach(EA_CurrentBuffs,
@@ -1302,20 +1528,29 @@ function EventAlert_COMBAT_TEXT_SPELL_ACTIVE(spellName)
 	end
 end
 ]]--
------------------------------------------------------------------
--- function EventAlert_OnUpdate()
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EventAlert_OnUpdate(spellID)
+	local tonumber = tonumber
+	local IsUsableSpell = IsUsableSpell	
+	local EA_SPELLINFO_SELF = EA_SPELLINFO_SELF
+	local PlayerItems = EA_Items[EA_playerClass]
+	local OtherItems = EA_Items[EA_CLASS_OTHER]
+	
+	
 	local timerFontSize = 0;
 	local SC_RedSecText, isOverGrow = -1, false;
 
 	local v = tostring(spellID);
 	local eaf = _G["EAFrame_"..v];
 	spellID = tonumber(v);
-	local name = EA_SPELLINFO_SELF[spellID].name;
+	local name = EA_SPELLINFO_SELF[spellID].name	
 	
 	if (EA_Config.AllowAltAlerts == true) then
 		
-		for s,v in pairs(EA_AltItems[EA_playerClass]) do
+		for s,v in pairs(AltItems) do
 			--local SpellEnable = EAFun_GetSpellItemEnable(EA_AltItems[EA_playerClass][spellID])
 			local SpellEnable = v.enable
 			
@@ -1325,14 +1560,14 @@ function EventAlert_OnUpdate(spellID)
 		
 				if (EA_usable) then					
 					-- local _,_,_,EAA_count,_,_,EAA_expirationTime,_,_ = UnitAura("player", name, rank);
-					EA_SPELLINFO_SELF[s].count = 0;
-					EA_SPELLINFO_SELF[s].expirationTime = 0;
-					EA_SPELLINFO_SELF[s].isDebuff = false;
-					EventAlert_PositionFrames();
+					EA_SPELLINFO_SELF[s].count = 0
+					EA_SPELLINFO_SELF[s].expirationTime = 0
+					EA_SPELLINFO_SELF[s].isDebuff = false
+					EventAlert_PositionFrames()
 				else					
-					EventAlert_Buff_Dropped(s);
-					EventAlert_PositionFrames();
-					return;
+					EventAlert_Buff_Dropped(s)
+					EventAlert_PositionFrames()
+					return
 				end
 				
 			end
@@ -1344,32 +1579,32 @@ function EventAlert_OnUpdate(spellID)
 		if (EA_Config.ShowTimer) then
 			-- local _,_,_,_,_,_,EA_expirationTime,_,_ = UnitAura("player", name, rank);
 			-- local EA_Name,_,_,EA_count,_,_,EA_expirationTime,_,_ = UnitAura("player", name, rank);
-			local EA_Name = EA_SPELLINFO_SELF[spellID].name;
-			local EA_count = EA_SPELLINFO_SELF[spellID].count;
-			local EA_expirationTime = EA_SPELLINFO_SELF[spellID].expirationTime;
-			local IfIsDebuff = EA_SPELLINFO_SELF[spellID].isDebuff;
-			local EA_currentTime = 0;
-			local EA_timeLeft = 0;
+			local EA_Name = EA_SPELLINFO_SELF[spellID].name
+			local EA_count = EA_SPELLINFO_SELF[spellID].count
+			local EA_expirationTime = EA_SPELLINFO_SELF[spellID].expirationTime
+			local IfIsDebuff = EA_SPELLINFO_SELF[spellID].isDebuff
+			local EA_currentTime = 0
+			local EA_timeLeft = 0
 
-			-- eaf:SetCooldown(EA_start, EA_duration);
+			-- eaf:SetCooldown(EA_start, EA_duration)
 			if (EA_expirationTime ~= nil) then
-				EA_currentTime = GetTime();
-				EA_timeLeft = 0 + EA_expirationTime - EA_currentTime;
+				EA_currentTime = GetTime()
+				EA_timeLeft = 0 + EA_expirationTime - EA_currentTime
 			end
 			
-			SC_RedSecText = EAFun_GetSpellConditionRedSecText(EA_Items[EA_playerClass][spellID]);
+			SC_RedSecText = EAFun_GetSpellConditionRedSecText(PlayerItems[spellID])
 			if (SC_RedSecText <= -1) then
-				SC_RedSecText = EAFun_GetSpellConditionRedSecText(EA_Items[EA_CLASS_OTHER][spellID]);
+				SC_RedSecText = EAFun_GetSpellConditionRedSecText(OtherItems[spellID])
 			end
-			EAFun_SetCountdownStackText(eaf, EA_timeLeft, EA_count, SC_RedSecText);
+			EAFun_SetCountdownStackText(eaf, EA_timeLeft, EA_count, SC_RedSecText)
 
-			isOverGrow = EAFun_CheckSpellConditionOverGrow(EA_count, EA_Items[EA_playerClass][spellID]);
+			isOverGrow = EAFun_CheckSpellConditionOverGrow(EA_count, PlayerItems[spellID])
 			if (not isOverGrow) then
-				isOverGrow = EAFun_CheckSpellConditionOverGrow(EA_count, EA_Items[EA_CLASS_OTHER][spellID]);
+				isOverGrow = EAFun_CheckSpellConditionOverGrow(EA_count, OtherItems[spellID])
 			end
 			FrameGlowShowOrHide(eaf,isOverGrow)
 		else
-			eaf.spellTimer:SetText("");
+			eaf.spellTimer:SetText("")
 			eaf.spellStack:SetText("");
 		end
 	end
@@ -1381,31 +1616,31 @@ function EventAlert_OnTarUpdate(spellID)
 
 	local v = tostring(spellID);
 	local eaf = _G["EATarFrame_"..v];
-	local name= GetSpellInfo(v);
+	local name = GetSpellInfo(v);
 	spellID = tonumber(v);
 
 	if eaf ~= nil then
 		--eaf:SetCooldown(1, 0);
 		if (EA_Config.ShowTimer) then
 			--local EA_Name,_,_,EA_count,_,EA_duration,EA_expirationTime,_,_ = UnitAura("target", name, rank, "HELPFUL|HARMFUL");
-			local EA_Name = EA_SPELLINFO_TARGET[spellID].name;
-			local EA_count = EA_SPELLINFO_TARGET[spellID].count;
-			local EA_expirationTime = EA_SPELLINFO_TARGET[spellID].expirationTime;			
-			local IfIsDebuff = EA_SPELLINFO_TARGET[spellID].isDebuff;
-			local EA_currentTime = 0;
-			local EA_timeLeft = 0;
+			local EA_Name = EA_SPELLINFO_TARGET[spellID].name
+			local EA_count = EA_SPELLINFO_TARGET[spellID].count
+			local EA_expirationTime = EA_SPELLINFO_TARGET[spellID].expirationTime
+			local IfIsDebuff = EA_SPELLINFO_TARGET[spellID].isDebuff
+			local EA_currentTime = 0
+			local EA_timeLeft = 0
 
 
 			if (EA_expirationTime ~= nil) then
-				EA_currentTime = GetTime();
-				EA_timeLeft = 0 + EA_expirationTime - EA_currentTime;
+				EA_currentTime = GetTime()
+				EA_timeLeft = 0 + EA_expirationTime - EA_currentTime
 			end		
 
-			SC_RedSecText = EAFun_GetSpellConditionRedSecText(EA_TarItems[EA_playerClass][spellID]);
+			SC_RedSecText = EAFun_GetSpellConditionRedSecText(EA_TarItems[EA_playerClass][spellID])
 
-			EAFun_SetCountdownStackText(eaf, EA_timeLeft, EA_count, SC_RedSecText);
+			EAFun_SetCountdownStackText(eaf, EA_timeLeft, EA_count, SC_RedSecText)
 
-			isOverGrow = EAFun_CheckSpellConditionOverGrow(EA_count, EA_TarItems[EA_playerClass][spellID]);
+			isOverGrow = EAFun_CheckSpellConditionOverGrow(EA_count, EA_TarItems[EA_playerClass][spellID])
 
 			FrameGlowShowOrHide(eaf,isOverGrow)
 
@@ -1418,15 +1653,15 @@ end
 -----------------------------------------------------------------
 function EventAlert_OnSCDUpdate(spellID)
 	
-	local iShift = 0;
+	local iShift = 0
 	local eaf = _G["EAScdFrame_"..spellID];
 	local flag_usable,flag_nomana =IsUsableSpell(spellID)
-	local EA_ChargeCurrent, EA_ChargeMax, EA_ChargeStart,EA_ChargeDuration = GetSpellCharges(spellID);
-	local EA_start, EA_duration, EA_Enable = GetSpellCooldown(spellID);	
+	local EA_ChargeCurrent, EA_ChargeMax, EA_ChargeStart,EA_ChargeDuration = GetSpellCharges(spellID)
+	local EA_start, EA_duration, EA_Enable = GetSpellCooldown(spellID)	
 	
-	local itemID = EA_Config.EA_SPELL_ITEM[spellID] or GetItemSpell()
+	local itemID = EA_Config.EA_SPELL_ITEM[spellID]
 	if itemID then		
-		EA_start, EA_duration, EA_Enable = GetItemCooldown(itemID);	
+		EA_start, EA_duration, EA_Enable = GetItemCooldown(itemID)
 	end
 	
 	local s = EA_SPELLINFO_SCD[spellID].start 
@@ -1441,13 +1676,13 @@ function EventAlert_OnSCDUpdate(spellID)
 		--eaf:SetBackdrop({bgFile = gsiIcon});
 		
 		--for 7.0 
-		local gsiIcon = GetSpellTexture(spellID)		
+		local gsiIcon = GetSpellTexture(spellID)
 		if not eaf.texture then eaf.texture = eaf:CreateTexture() end
 		eaf.texture:SetAllPoints(eaf)
 		eaf.texture:SetTexture(gsiIcon)
 		
-		eaf:SetWidth(EA_Config.IconSize);
-		eaf:SetHeight(EA_Config.IconSize);
+		eaf:SetWidth(EA_Config.IconSize)
+		eaf:SetHeight(EA_Config.IconSize)
 
 		if (EA_Position.SCD_UseCooldown) then
 			eaf.useCooldown = true
@@ -1456,11 +1691,10 @@ function EventAlert_OnSCDUpdate(spellID)
 		end
 
 		if EA_ChargeCurrent then
-			local EA_timeLeft = EA_ChargeStart + EA_ChargeDuration - GetTime();
+			local EA_timeLeft = EA_ChargeStart + EA_ChargeDuration - GetTime()
 			if EA_ChargeCurrent > 0 then
 
-				if (EA_ChargeCurrent == EA_ChargeMax) then
-				
+				if (EA_ChargeCurrent == EA_ChargeMax) then				
 
 					if eaf.useCooldown then
 						--eaf.cooldown:SetCooldown(EA_ChargeStart, EA_ChargeDuration,EA_ChargeCurrent,EA_ChargeMax)
@@ -1478,7 +1712,7 @@ function EventAlert_OnSCDUpdate(spellID)
 						else
 							EAFun_SetCountdownStackText(eaf, 0, EA_ChargeCurrent, 0, 1)
 						end
-						if EA_Config.SCD_RemoveWhenCooldown==true then RemoveSingleSCDCurrentBuff(spellID)	end
+						if EA_Config.SCD_RemoveWhenCooldown == true then RemoveSingleSCDCurrentBuff(spellID) end
 					end
 
 				else
@@ -1486,13 +1720,15 @@ function EventAlert_OnSCDUpdate(spellID)
 						eaf.cooldown:SetCooldown(EA_ChargeStart, EA_ChargeDuration,EA_ChargeCurrent,EA_ChargeMax)
 						eaf.cooldown:SetHideCountdownNumbers(true)
 						eaf.cooldown:SetDrawSwipe(false)
-						EAFun_SetCountdownStackText(eaf, 0, EA_ChargeCurrent, 1);
+						EAFun_SetCountdownStackText(eaf, 0, EA_ChargeCurrent, 1)
 					else
-						EAFun_SetCountdownStackText(eaf,  EA_timeLeft,EA_ChargeCurrent,0, 1);
+						EAFun_SetCountdownStackText(eaf,  EA_timeLeft,EA_ChargeCurrent,0, 1)
 					end					
 				end
+				if EA_Config.SCD_GlowWhenUsable==true  then 
+					FrameGlowShowOrHide(eaf,flag_usable)
+				end
 				
-				if EA_Config.SCD_GlowWhenUsable then FrameGlowShowOrHide(eaf,flag_usable) end
 				--FrameGlowShowOrHide(eaf,true)
 				
 			else
@@ -1501,29 +1737,25 @@ function EventAlert_OnSCDUpdate(spellID)
 					eaf.cooldown:SetCooldown(EA_ChargeStart, EA_ChargeDuration,EA_ChargeCurrent,EA_ChargeMax)
 					eaf.cooldown:SetHideCountdownNumbers(true)
 					eaf.cooldown:SetDrawSwipe(true)
-					EAFun_SetCountdownStackText(eaf, 0 , EA_ChargeCurrent, -1);
+					EAFun_SetCountdownStackText(eaf, 0 , EA_ChargeCurrent, -1)
 				else
-					EAFun_SetCountdownStackText(eaf, EA_timeLeft , EA_ChargeCurrent, -1);
+					EAFun_SetCountdownStackText(eaf, EA_timeLeft , EA_ChargeCurrent, -1)
 				end
-
-				if EA_Config.SCD_GlowWhenUsable then FrameGlowShowOrHide(eaf, false) end
+				if EA_Config.SCD_GlowWhenUsable == true then
+					FrameGlowShowOrHide(eaf,  false)								
+				end
 				--FrameGlowShowOrHide(eaf, false)
 				
 			end
 		else
 		
 			if (EA_Enable == 1) then
-				
+
 				local EA_timeLeft = EA_start + EA_duration - GetTime();
-				local EA_GCD = 1.5/((100+UnitSpellHaste("player"))/100)
-				
+				local EA_GCD = 1.5 / ((100 + UnitSpellHaste("player")) / 100)
 
 				if EA_GCD < 0.75 then EA_GCD = 0.75 end
 
-				--local EA_GCD=1.5
-				
-				
-				
 				--if (EA_start > 0 and EA_duration > EA_GCD )  then
 				if (EA_timeLeft > 0 and EA_duration > EA_GCD )  then
 					 --DEFAULT_CHAT_FRAME:AddMessage("[spellID="..spellID.." / EA_timeLeft="..EA_timeLeft.."]");
@@ -1548,87 +1780,103 @@ function EventAlert_OnSCDUpdate(spellID)
 					if EA_Config.SCD_RemoveWhenCooldown==true then 
 						RemoveSingleSCDCurrentBuff(spellID) 
 					else
-						if EA_Config.SCD_GlowWhenUsable then FrameGlowShowOrHide(eaf,flag_usable) end
-						--FrameGlowShowOrHide(eaf, true)
+						if EA_Config.SCD_GlowWhenUsable == true then
+							FrameGlowShowOrHide(eaf,flag_usable)
+						end
 					end
 				end
 				
 			end
 		end
 
-		EventAlert_ScdPositionFrames();
+		EventAlert_ScdPositionFrames()
 	end
 end
------------------------------------------------------------------
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EventAlert_DoAlert()
 	if (EA_Config.ShowFlash == true) then
-		UIFrameFadeIn(LowHealthFrame, 1, 0, 1);
-		UIFrameFadeOut(LowHealthFrame, 2, 1, 0);
+		UIFrameFadeIn(LowHealthFrame, 1, 0, 1)
+		UIFrameFadeOut(LowHealthFrame, 2, 1, 0)
 	end
 	if (EA_Config.DoAlertSound == true) then
-		PlaySoundFile(EA_Config.AlertSound);
+		PlaySoundFile(EA_Config.AlertSound)
 	end
 end
------------------------------------------------------------------
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EventAlert_PositionFrames()
+	local tonumber = tonumber
+		local type = type
+		local ipairs = ipairs
+		local format = format
+		local EA_SPELLINFO_SELF = EA_SPELLINFO_SELF		
+		local Anchor = EA_Position.Anchor
+		local ShowAuraValueWhenOver = EA_Config.ShowAuraValueWhenOver						
+		local IconSize = EA_Config.IconSize
+
 	if (EA_Config.ShowFrame == true) then
-		EA_Main_Frame:ClearAllPoints();
-		EA_Main_Frame:SetPoint(EA_Position.Anchor, UIParent, EA_Position.relativePoint, EA_Position.xLoc, EA_Position.yLoc);
-		local prevFrame = "EA_Main_Frame";
-		local prevFrame2 = "EA_Main_Frame";
-		local xOffset = 100 + EA_Position.xOffset;
-		local yOffset = 0 + EA_Position.yOffset;
-		local SfontName, SfontSize = "", 0;
+		EA_Main_Frame:ClearAllPoints()
+		EA_Main_Frame:SetPoint(Anchor, UIParent, EA_Position.relativePoint, EA_Position.xLoc, EA_Position.yLoc)
+		local prevFrame = "EA_Main_Frame"
+		local prevFrame2 = "EA_Main_Frame"
+		local xOffset = 100 + EA_Position.xOffset
+		local yOffset = 0 + EA_Position.yOffset
+		local SfontName, SfontSize = "", 0
 
-		EA_CurrentBuffs = EAFun_SortCurrBuffs(1, EA_CurrentBuffs);
-
+		local EA_CurrentBuffs = EAFun_SortCurrBuffs(1, EA_CurrentBuffs)	
+		
 		for k,v in ipairs(EA_CurrentBuffs) do
-			local eaf = _G["EAFrame_"..v];
+			local eaf = _G["EAFrame_"..v]
 			local spellID = tonumber(v);
-			local gsiName = EA_SPELLINFO_SELF[spellID].name;
+			local gsiName = EA_SPELLINFO_SELF[spellID].name
 			local gsiValue = EA_SPELLINFO_SELF[spellID].value 
 			--local gsiValue1 = EA_SPELLINFO_SELF[spellID].value1;
 			--local gsiValue2 = EA_SPELLINFO_SELF[spellID].value2;
 			--local gsiValue3 = EA_SPELLINFO_SELF[spellID].value3;
-			local gsiIcon = EA_SPELLINFO_SELF[spellID].icon;
-			local gsiIsDebuff = EA_SPELLINFO_SELF[spellID].isDebuff;
+			local gsiIcon = EA_SPELLINFO_SELF[spellID].icon
+			local gsiIsDebuff = EA_SPELLINFO_SELF[spellID].isDebuff
 
 			if eaf ~= nil then
 				eaf:ClearAllPoints();
 				if EA_Position.Tar_NewLine then
 					if gsiIsDebuff then
 						if (prevFrame2 == "EA_Main_Frame" or prevFrame2 == eaf) then
-							prevFrame2 = "EA_Main_Frame";
+							prevFrame2 = "EA_Main_Frame"
 							if EA_SpecFrame_Self then
-								eaf:SetPoint(EA_Position.Anchor, prevFrame2, EA_Position.Anchor, -2 * xOffset, -2 * yOffset);
+								eaf:SetPoint(Anchor, prevFrame2, Anchor, -2 * xOffset, -2 * yOffset)
 							else
-								eaf:SetPoint(EA_Position.Anchor, prevFrame2, EA_Position.Anchor, -1 * xOffset, -1 * yOffset);
+								eaf:SetPoint(Anchor, prevFrame2, Anchor, -1 * xOffset, -1 * yOffset)
 							end
 						else
-							eaf:SetPoint("CENTER", prevFrame2, "CENTER", -1 * xOffset, -1 * yOffset);
+							eaf:SetPoint("CENTER", prevFrame2, "CENTER", -1 * xOffset, -1 * yOffset)
 						end
-						prevFrame2 = eaf;
+						prevFrame2 = eaf
 					else
 						if (prevFrame == "EA_Main_Frame" or prevFrame == eaf) then
-							prevFrame = "EA_Main_Frame";
-							eaf:SetPoint(EA_Position.Anchor, prevFrame, EA_Position.Anchor, 0, 0);
+							prevFrame = "EA_Main_Frame"
+							eaf:SetPoint(Anchor, prevFrame, Anchor, 0, 0)
 						else
-							eaf:SetPoint("CENTER", prevFrame, "CENTER", xOffset, yOffset);
+							eaf:SetPoint("CENTER", prevFrame, "CENTER", xOffset, yOffset)
 						end
-						prevFrame = eaf;
+						prevFrame = eaf
 					end
 				else
 					if (prevFrame == "EA_Main_Frame" or prevFrame == eaf) then
-						prevFrame = "EA_Main_Frame";
-						eaf:SetPoint(EA_Position.Anchor, prevFrame, EA_Position.Anchor, 0, 0);
+						prevFrame = "EA_Main_Frame"
+						eaf:SetPoint(Anchor, prevFrame, Anchor, 0, 0)
 					else
-						eaf:SetPoint("CENTER", prevFrame, "CENTER", xOffset, yOffset);
+						eaf:SetPoint("CENTER", prevFrame, "CENTER", xOffset, yOffset)
 					end
-					prevFrame = eaf;
+					prevFrame = eaf
 				end;
 
-				eaf:SetWidth(EA_Config.IconSize);
-				eaf:SetHeight(EA_Config.IconSize);
+				eaf:SetWidth(IconSize)
+				eaf:SetHeight(IconSize)
 				--eaf:SetBackdrop({bgFile = gsiIcon});
 				--for 7.0
 				if not eaf.texture then eaf.texture = eaf:CreateTexture() end
@@ -1641,14 +1889,15 @@ function EventAlert_PositionFrames()
 				FrameAppendAuraTip(eaf,"pet",spellID,gsiIsDebuff)				
 
 				 
-				if gsiIsDebuff then eaf:SetBackdropColor(1.0, EA_Position.RedDebuff, EA_Position.RedDebuff) end;
+				--if gsiIsDebuff then eaf:SetBackdropColor(EA_Position.RedDebuff,0,0) end
+				--if gsiIsDebuff then eaf.texture:SetColorTexture(1.0,EA_Position.RedDebuff,EA_Position.RedDebuff) end
 				
 				if (EA_Config.ShowName == true) then
 					local tmp = gsiName
-					if gsiValue and type(gsiValue)=="table" then
+					if gsiValue and type(gsiValue)=="table" then						
 						for i,v in ipairs(gsiValue) do
-							if v > EA_Config.ShowAuraValueWhenOver then	
-								if v > 10000 then v = format("%.1f萬",v/10000) end
+							if v > ShowAuraValueWhenOver then	
+								if v > 10000 then v = format("%.1f萬",v / 10000) end
 								tmp = tmp.."\n"..v 
 							end
 						end
@@ -1657,23 +1906,30 @@ function EventAlert_PositionFrames()
 					--if gsiValue2 and (gsiValue2 > 0) then  tmp=tmp.."\n"..gsiValue2 end
 					--if gsiValue3 and (gsiValue3 > 0) then  tmp=tmp.."\n"..gsiValue3 end
 				
-					eaf.spellName:SetText(tmp);
-					SfontName, SfontSize = eaf.spellName:GetFont();
-					eaf.spellName:SetFont(SfontName, EA_Config.SNameFontSize);
+					eaf.spellName:SetText(tmp)
+					SfontName, SfontSize = eaf.spellName:GetFont()
+					eaf.spellName:SetFont(SfontName, EA_Config.SNameFontSize)
 				else
-					eaf.spellName:SetText("");
+					eaf.spellName:SetText("")
 				end
-				eaf.spellTimer:SetFont("Fonts\\FRIZQT__.TTF", EA_Config.TimerFontSize, "OUTLINE");
-				eaf.spellStack:SetFont("Fonts\\FRIZQT__.TTF", EA_Config.StackFontSize, "OUTLINE");
-				eaf:SetScript("OnUpdate", function()
-					EventAlert_OnUpdate(spellID)
+				eaf.spellTimer:SetFont("Fonts\\FRIZQT__.TTF", EA_Config.TimerFontSize, "OUTLINE")
+				eaf.spellStack:SetFont("Fonts\\FRIZQT__.TTF", EA_Config.StackFontSize, "OUTLINE")
+				eaf:SetScript("OnUpdate", function(self,elapsedTime)
+					EventAlert_TimeSinceUpdate_Self = EventAlert_TimeSinceUpdate_Self + elapsedTime
+					if EventAlert_TimeSinceUpdate_Self > EventAlert_UpdateInterval then
+						EventAlert_OnUpdate(spellID)
+						EventAlert_TimeSinceUpdate_SELF = 0
+					end
 				end);
 				eaf:Show();
 			end
 		end
 	end
 end
------------------------------------------------------------------
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EventAlert_TarPositionFrames()
 	if (EA_Config.ShowFrame == true) then
 		EA_Main_Frame:ClearAllPoints();
@@ -1684,8 +1940,12 @@ function EventAlert_TarPositionFrames()
 		local yOffset = 0 + EA_Position.yOffset;
 		local SfontName, SfontSize = "", 0;
 
-		EA_TarCurrentBuffs = EAFun_SortCurrBuffs(2, EA_TarCurrentBuffs);
-
+		EA_TarCurrentBuffs = EAFun_SortCurrBuffs(2, EA_TarCurrentBuffs)
+		
+		local tonumber = tonumber
+		local EA_SPELLINFO_TARGET = EA_SPELLINFO_TARGET		
+		local IconSize = EA_Config.IconSize
+		local ShowAuraValueWhenOver=EA_Config.ShowAuraValueWhenOver
 		for k,v in ipairs(EA_TarCurrentBuffs) do
 			local eaf = _G["EATarFrame_"..v];
 			local spellID = tonumber(v);
@@ -1732,8 +1992,8 @@ function EventAlert_TarPositionFrames()
 					end
 				end
 
-				eaf:SetWidth(EA_Config.IconSize)
-				eaf:SetHeight(EA_Config.IconSize)
+				eaf:SetWidth(IconSize)
+				eaf:SetHeight(IconSize)
 				
 				--eaf:SetBackdrop({bgFile = gsiIcon})
 				--for 7.0
@@ -1745,14 +2005,15 @@ function EventAlert_TarPositionFrames()
 				--FrameAppendSpellTip(eaf,spellID)
 				FrameAppendAuraTip(eaf,"target",spellID,gsiIsDebuff)
 				
-				if gsiIsDebuff then eaf:SetBackdropColor(EA_Position.GreenDebuff, 1.0, EA_Position.GreenDebuff) end;
+				--if gsiIsDebuff then eaf:SetBackdropColor(0,EA_Position.GreenDebuff,0) end;
+				--if gsiIsDebuff then eaf.texture:SetColorTexture(EA_Position.GreenDebuff,1.0,EA_Position.GreenDebuff) end
 								
 				if (EA_Config.ShowName == true) then
 					-- print(tmp,gsiValue1,gsiValue2,gsiValue3)
 					local tmp=gsiName	
 					if gsiValue and type(gsiValue)=="table" then
 						for k,v in pairs(gsiValue) do
-							if v > EA_Config.ShowAuraValueWhenOver then 
+							if v > ShowAuraValueWhenOver then 
 								if v > 10000 then v = format("%.1f萬",v/10000) end
 								tmp = tmp.."\n"..v 
 							end
@@ -1770,16 +2031,24 @@ function EventAlert_TarPositionFrames()
 				end
 				eaf.spellTimer:SetFont("Fonts\\FRIZQT__.TTF", EA_Config.TimerFontSize, "OUTLINE");
 				eaf.spellStack:SetFont("Fonts\\FRIZQT__.TTF", EA_Config.StackFontSize, "OUTLINE");
-				eaf:SetScript("OnUpdate", function()
-					EventAlert_OnTarUpdate(spellID)
+				eaf:SetScript("OnUpdate", function(self,elapsedTime)
+					EventAlert_TimeSinceUpdate_Target = EventAlert_TimeSinceUpdate_Target + elapsedTime
+					if EventAlert_TimeSinceUpdate_Target > EventAlert_UpdateInterval then
+						EventAlert_OnTarUpdate(spellID)
+						EventAlert_TimeSinceUpdate_Target = 0
+					end				
 				end);
 				eaf:Show();
 			end
 		end
 	end
 end
------------------------------------------------------------------
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EventAlert_ScdPositionFrames()
+	local NewLineByIconCount = EA_Config.NewLineByIconCount
 
 	--If Player is Combating, don't show Spell Cooldown Frame.
 	if EA_Config.SCD_NocombatStillKeep == false then
@@ -1796,6 +2065,7 @@ function EventAlert_ScdPositionFrames()
 		local yOffset = 0 + EA_Position.yOffset;
 		local SfontName, SfontSize = "", 0;
 		
+		local EA_SPELLINFO_SCD = EA_SPELLINFO_SCD
 		for s,v in pairs(EA_ScdItems[EA_playerClass]) do
 			for k,v2 in pairs(v) do 
 				if k == "orderwtd" then
@@ -1805,22 +2075,37 @@ function EventAlert_ScdPositionFrames()
 			end
 		end 
 		
-		EA_ScdCurrentBuffs = EAFun_SortCurrBuffs(3, EA_ScdCurrentBuffs)
-		
-		for k,v in ipairs(EA_ScdCurrentBuffs) do
-			local eaf = _G["EAScdFrame_"..v];
-			local spellID = tonumber(v);
-			local gsiName = EA_SPELLINFO_SCD[spellID].name;
-			
-			
-
+		local EA_ScdCurrentBuffs = EAFun_SortCurrBuffs(3, EA_ScdCurrentBuffs)
+		local tonumber = tonumber
+		local mathabs = math.abs
+		local sx,sy = EA_Position.Scd_xOffset,EA_Position.Scd_yOffset
+		local sanchor = EA_Position.ScdAnchor
+		for i,v in ipairs(EA_ScdCurrentBuffs) do
+			local eaf = _G["EAScdFrame_"..v]
+			local spellID = tonumber(v)
+			local gsiName = EA_SPELLINFO_SCD[spellID].name			
 			if eaf ~= nil then
-				eaf:ClearAllPoints();
-				if (prevFrame == "EA_Main_Frame" or prevFrame == eaf) then
-					prevFrame = "EA_Main_Frame";
-					eaf:SetPoint("CENTER", UIParent, EA_Position.ScdAnchor, EA_Position.Scd_xOffset, EA_Position.Scd_yOffset);
+				eaf:ClearAllPoints()
+				
+				if (prevFrame == "EA_Main_Frame" or prevFrame == eaf ) then
+					prevFrame = "EA_Main_Frame"
+					eaf:SetPoint("CENTER", UIParent, sanchor, sx,sy)				
 				else
-					eaf:SetPoint("CENTER", prevFrame, "CENTER", xOffset, yOffset);
+					if NewLineByIconCount and NewLineByIconCount > 0  then 							
+						
+						local modvalue = (i-1) % NewLineByIconCount
+						local divvalue = floor((i-1) / NewLineByIconCount)						
+						if (modvalue) == 0 then
+							--prevFrame = "EA_Main_Frame"
+							eaf:SetPoint("CENTER", prevFrame, "CENTER", -xOffset*(NewLineByIconCount-1), -mathabs(xOffset))							
+						else
+							eaf:SetPoint("CENTER", prevFrame, "CENTER", xOffset, yOffset)
+						end
+						
+					else
+						eaf:SetPoint("CENTER", prevFrame, "CENTER", xOffset, yOffset)
+					end
+					
 				end
 
 				if (EA_Config.ShowName == true) then
@@ -1842,8 +2127,10 @@ function EventAlert_ScdPositionFrames()
 		end
 	end
 end
------------------------------------------------------------------
--- The command parser
+
+--[[------------------------------------------------------------------
+The command parser
+--------------------------------------------------------------------]]
 function EventAlert_SlashHandler(msg)
 	local F_EA = "\124cffFFFF00EventAlertMod\124r";
 	local F_ON = "\124cffFF0000".."[ON]".."\124r";
@@ -1968,25 +2255,52 @@ function EventAlert_SlashHandler(msg)
 
 	
     elseif (cmdtype == "minimap") then
-		if EA_Config.OPTION_ICON == false  then	
+		local f = EA_MinimapOption
+		if para1 and para1=="reset" then
+			f:ClearAllPoints()
+			f:SetPoint("CENTER",Minimap,"BOTTOMLEFT",-30,-20)
 			EA_Config.OPTION_ICON = true
+			f:Show()
+		else
+			print("show or hide option icon.\n(left button:show option/right button:move option icon)")
+			if EA_Config.OPTION_ICON == false  then	
+				print("Show option icon nearby minimap")
+				EA_Config.OPTION_ICON = true
+				f:Show()		
+			else			
+				EA_Config.OPTION_ICON = false
+				f:Hide()
+			end
+		end
+	elseif (cmdtype == "iconappendspelltip") then
+		print("show or hide help tip of option icon ")
+		if EA_Config.ICON_APPEND_SPELL_TIP == false  then	
+			EA_Config.ICON_APPEND_SPELL_TIP = true
 			EA_MinimapOption:Show()		
 		else			
-			EA_Config.OPTION_ICON = false
+			EA_Config.ICON_APPEND_SPELL_TIP = false
 			EA_MinimapOption:Hide()
 		end
-		
+	
+	elseif (cmdtype == "updateinterval") then
+		print("upper the onupdate interval if you feel lag.(max 1s)")
+		local para_updateinterval = tonumber(para1) or 1
+		if para_updateinterval > 1 then para_updateinterval = 1 end		
+		EventAlert_UpdateInterval = para_updateinterval 
+		print("OnUpdate Event Will Occur Each "..para_updateinterval.." seconds") 
+		print("WARNING! : Don't more than 1 sec ")
+
 	elseif (cmdtype == "scdremovewhencooldown") then
-		if EA_Config.SCD_RemoveWhenCooldown == true then
-			
+		print("To remove or keep icon when spell cooldown")
+		if EA_Config.SCD_RemoveWhenCooldown == true then			
 			EA_Config.SCD_RemoveWhenCooldown = false
-			print("EA_Config.SCD_RemoveWhenCooldown = false")		
-			
+			print("EA_Config.SCD_RemoveWhenCooldown = false")			
 		else
 			EA_Config.SCD_RemoveWhenCooldown = true
 			print("EA_Config.SCD_RemoveWhenCooldown = true")
 		end
 	elseif (cmdtype == "scdnocombatstillkeep") then
+		print("Keep or hide icon when exit combat status.")
 		if EA_Config.SCD_NocombatStillKeep == true then			
 			EA_Config.SCD_NocombatStillKeep = false
 			print("EA_Config.SCD_NocombatStillKeep = false")					
@@ -1994,7 +2308,28 @@ function EventAlert_SlashHandler(msg)
 			EA_Config.SCD_NocombatStillKeep = true
 			print("EA_Config.SCD_NocombatStillKeep = true")
 		end
+	elseif (cmdtype == "scdglowwhenusable") then
+		print("Glow CD icon when the spell can use.(not only cooldown) ")
+		if EA_Config.SCD_GlowWhenUsable == true then			
+			EA_Config.SCD_GlowWhenUsable = false
+			print("EA_Config.SCD_GlowWhenUsable = false")					
+		else
+			EA_Config.SCD_GlowWhenUsable = true
+			print("EA_Config.SCD_GlowWhenUsable = true")
+		end
+	elseif (cmdtype == "newlinebyiconcount") then
+		print("Assign counts of icons for change new line")
+		local para_count = tonumber(para1)
+		if para_count then
+			EA_Config.NewLineByIconCount = para_count
+			print("EA_Config.NewLineByIconCount = "..para_count )					
+		else
+			print("Not assign count of icon for change line")
+		end
 	elseif (cmdtype == "showeaconfig") then
+		local print = print
+		local pairs = pairs
+		local type  = type
 		print("EA_Config:")
 		for k,v in pairs(EA_Config) do
 			if type(v)=="table" then
@@ -2006,6 +2341,9 @@ function EventAlert_SlashHandler(msg)
 			end
 		end
 	elseif (cmdtype == "showeaposition") then
+		local print = print
+		local pairs = pairs
+		local type  = type
 		print("EA_Position:")
 		for k,v in pairs(EA_Position) do
 			if type(v)=="table" then
@@ -2115,19 +2453,23 @@ function EventAlert_SlashHandler(msg)
 		end
 	end
 end
------------------------------------------------------------------
--- The URLs of update
-function EventAlert_ShowVerURL(SiteIndex)
-	local VerUrl = "";
-	VerUrl = EA_XOPT_VERURL1;
-	if SiteIndex ~= 1 then
-		VerUrl = "http://forum.gamer.com.tw/Co.php?bsn=05219&sn=5125122&subbsn=0";
-	end
 
-	-- WOW API?T?��??????s?????s?????A?u?????URL?b?????????C
-	DEFAULT_CHAT_FRAME:AddMessage(VerUrl);
+--[[------------------------------------------------------------------
+-- The URLs of update
+--------------------------------------------------------------------]]
+function EventAlert_ShowVerURL(SiteIndex)
+	local VerUrl = ""
+	VerUrl = EA_XOPT_VERURL1
+	if SiteIndex ~= 1 then
+		VerUrl = "http://forum.gamer.com.tw/Co.php?bsn=05219&sn=5125122&subbsn=0"
+	end
+	
+	DEFAULT_CHAT_FRAME:AddMessage(VerUrl)
 end
------------------------------------------------------------------
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EAFun_CreateVersionFrame_ScrollEditBox()
 	local framewidth = EA_Version_Frame:GetWidth()-45;
 	local frameheight = EA_Version_Frame:GetHeight()-70;
@@ -2163,14 +2505,20 @@ function EAFun_CreateVersionFrame_ScrollEditBox()
 		etb1:SetAutoFocus(false);
 	end
 end
------------------------------------------------------------------
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 local function EAFun_ExtendExecution_4505(EAItems)
 	for index1, value1 in pairsByKeys(EAItems) do
 		if EAItems[index1] ~= nil then EAItems[index1].Execution = 0 end;
 	end
 	return EAItems;
 end
------------------------------------------------------------------
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 local function EAFun_ChangeSavedVariblesFormat_4505(EAItems, EASelf)
 	if EAItems == nil then EAItems = { } end;
 	for index1, value1 in pairsByKeys(EAItems) do
@@ -2184,69 +2532,75 @@ local function EAFun_ChangeSavedVariblesFormat_4505(EAItems, EASelf)
 	end
 	return EAItems;
 end
------------------------------------------------------------------
-function EventAlert_VersionCheck()
-	local EA_TocVersion = GetAddOnMetadata("EventAlertMod", "Version");
-	-- local F_EA = "\124cffFFFF00EventAlertMod\124r";
 
-	EAFun_CreateVersionFrame_ScrollEditBox();
-	EA_Version_Frame_Okay:SetText(EA_XOPT_OKAY);
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
+function EventAlert_VersionCheck()
+	local EA_TocVersion = GetAddOnMetadata("EventAlertMod", "Version")
+	-- local F_EA = "\124cffFFFF00EventAlertMod\124r"
+
+	EAFun_CreateVersionFrame_ScrollEditBox()
+	EA_Version_Frame_Okay:SetText(EA_XOPT_OKAY)
 
 	if (EA_Config.Version ~= EA_TocVersion and EA_Config.Version ~= nil) then
 		if (EA_Config.Version < "4.5.01" and EA_TocVersion < "4.5.04") then
 			-- Ver 4.5.01 is For WOW 4.0.1+
 			-- Many WOW 3.x spells are canceled or integrated,
 			-- so the saved-spells should be clear, and to load the new spells.
-			EA_Items = { };
-			EA_AltItems = { };
-			EA_TarItems = { };
-			EA_ScdItems = { };
-			EA_GrpItems = { };
+			EA_Items = { }
+			EA_AltItems = { }
+			EA_TarItems = { }
+			EA_ScdItems = { }
+			EA_GrpItems = { }
 		end
 		if (EA_Config.Version < "4.5.05" and EA_TocVersion <= "4.7.02") then
 			-- EventAlert SpellArray Format Change, from true/false values to parameters values
 			-- so, it should formate old parameters to new
-			EA_Pos = EAFun_ExtendExecution_4505(EA_Pos);
-			EA_Items = EAFun_ChangeSavedVariblesFormat_4505(EA_Items, false);
-			EA_AltItems = EAFun_ChangeSavedVariblesFormat_4505(EA_AltItems, false);
-			EA_TarItems = EAFun_ChangeSavedVariblesFormat_4505(EA_TarItems, true);
-			EA_ScdItems = EAFun_ChangeSavedVariblesFormat_4505(EA_ScdItems, false);
-			EA_GrpItems = { };
+			EA_Pos = EAFun_ExtendExecution_4505(EA_Pos)
+			EA_Items = EAFun_ChangeSavedVariblesFormat_4505(EA_Items, false)
+			EA_AltItems = EAFun_ChangeSavedVariblesFormat_4505(EA_AltItems, false)
+			EA_TarItems = EAFun_ChangeSavedVariblesFormat_4505(EA_TarItems, true)
+			EA_ScdItems = EAFun_ChangeSavedVariblesFormat_4505(EA_ScdItems, false)
+			EA_GrpItems = { }
 		end
-		EA_Config.Version = EA_TocVersion;
+		EA_Config.Version = EA_TocVersion
 		-- if (EA_XLOAD_NEWVERSION_LOAD ~= "") then
 		-- 	EA_Version_ScrollFrame_EditBox:SetText(F_EA..EA_XCMD_VER..EA_Config.Version.."\n\n\n"..EA_XLOAD_NEWVERSION_LOAD);
 		-- 	EA_Version_Frame:Show();
 		-- end
-		EventAlert_LoadClassSpellArray(9);
+		EventAlert_LoadClassSpellArray(9)
 	elseif (EA_Config.Version == nil) then
-		EA_Items = { };
-		EA_AltItems = { };
-		EA_TarItems = { };
-		EA_ScdItems = { };
-		EA_GrpItems = { };
-		EA_Config.Version = EA_TocVersion;
+		EA_Items = { }
+		EA_AltItems = { }
+		EA_TarItems = { }
+		EA_ScdItems = { }
+		EA_GrpItems = { }
+		EA_Config.Version = EA_TocVersion
 		-- if (EA_XLOAD_FIRST_LOAD ~= "") then
 		-- 	EA_Version_ScrollFrame_EditBox:SetText(F_EA..EA_XCMD_VER..EA_Config.Version.."\n\n\n"..EA_XLOAD_FIRST_LOAD..EA_XLOAD_NEWVERSION_LOAD)
 		-- 	EA_Version_Frame:Show();
 		-- end
-		EventAlert_LoadClassSpellArray(9);
+		EventAlert_LoadClassSpellArray(9)
 
 	elseif (EAFun_GetCountOfTable(EA_Items[EA_playerClass]) <= 0) then
-		EventAlert_LoadClassSpellArray(9);
+		EventAlert_LoadClassSpellArray(9)
 	end
 
-	if EA_Items[EA_playerClass] == nil then EA_Items[EA_playerClass] = {} end;
-	if EA_AltItems[EA_playerClass] == nil then EA_AltItems[EA_playerClass] = {} end;
-	if EA_Items[EA_CLASS_OTHER] == nil then EA_Items[EA_CLASS_OTHER] = {} end;
-	if EA_TarItems[EA_playerClass] == nil then EA_TarItems[EA_playerClass] = {} end;
-	if EA_ScdItems[EA_playerClass] == nil then EA_ScdItems[EA_playerClass] = {} end;
-	if EA_GrpItems[EA_playerClass] == nil then EA_GrpItems[EA_playerClass] = {} end;
+	if EA_Items[EA_playerClass] == nil then EA_Items[EA_playerClass] = {} end
+	if EA_AltItems[EA_playerClass] == nil then EA_AltItems[EA_playerClass] = {} end
+	if EA_Items[EA_CLASS_OTHER] == nil then EA_Items[EA_CLASS_OTHER] = {} end
+	if EA_TarItems[EA_playerClass] == nil then EA_TarItems[EA_playerClass] = {} end
+	if EA_ScdItems[EA_playerClass] == nil then EA_ScdItems[EA_playerClass] = {} end
+	if EA_GrpItems[EA_playerClass] == nil then EA_GrpItems[EA_playerClass] = {} end
 	-- EventAlert_LoadClassSpellArray(6);
 	-- After confirm the version, set the VersionText in the EA_Options_Frame.
-	EA_Options_Frame_VersionText:SetText("Ver:\124cffFFFFFF"..EA_Config.Version.."\124r");
+	EA_Options_Frame_VersionText:SetText("Ver:\124cffFFFFFF"..EA_Config.Version.."\124r")
 end
------------------------------------------------------------------
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function insertBuffValue(tab, value)
 	local isExist = false;
 	for pos, name in ipairs(tab) do
@@ -2254,21 +2608,30 @@ function insertBuffValue(tab, value)
 			isExist = true;
 		end
 	end
-	if not isExist then table.insert(tab, value) end;
+	if not isExist then tinsert(tab, value) end;
 end
------------------------------------------------------------------
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function removeBuffValue(tab, value)
+	local tremove = table.remove
 	for pos, name in ipairs(tab) do
 		if (name == value) then
-			table.remove(tab, pos)
+			tremove(tab, pos)
 		end
 	end
 end
------------------------------------------------------------------
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function pairsByKeys (t, f)
 	local a = {}
-	for n in pairs(t) do table.insert(a, n) end
-	table.sort(a, f)
+	local tinsert = table.insert
+	local tsort = table.sort
+	for n in pairs(t) do tinsert(a, n) end
+	tsort(a, f)
 	local i = 0 -- iterator variable
 	local iter = function () -- iterator function
 		i = i + 1
@@ -2280,7 +2643,10 @@ function pairsByKeys (t, f)
 	end
 	return iter
 end
------------------------------------------------------------------
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EAFun_GetFormattedTime(timeLeft)
 	local formattedTime = "";
 	if timeLeft <= 60 then
@@ -2298,29 +2664,35 @@ function EAFun_GetFormattedTime(timeLeft)
 	end
 	return formattedTime
 end
------------------------------------------------------------------
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function MyPrint(info)
-	DEFAULT_CHAT_FRAME:AddMessage(info);
+	DEFAULT_CHAT_FRAME:AddMessage(info)
 end
------------------------------------------------------------------
+
+--[[------------------------------------------------------------------
+
+--------------------------------------------------------------------]]
 function EAFun_SetCountdownStackText(eaf, EA_timeLeft, EA_count, SC_RedSecText)
-	eaf.spellTimer:ClearAllPoints();
+	eaf.spellTimer:ClearAllPoints()
 	if ((SC_RedSecText == nil) or (SC_RedSecText <= 0)) then SC_RedSecText = -1 end;
 	if (EA_timeLeft > 0) then
 		if (EA_Config.ChangeTimer == true) then			
-			eaf.spellTimer:SetPoint("CENTER", eaf, "CENTER", 0, 0);
+			eaf.spellTimer:SetPoint("CENTER", eaf, "CENTER", 0, 0)
 		else
-			--eaf.spellTimer:SetPoint("TOP", 0, EA_Config.TimerFontSize);			
-			eaf.spellTimer:SetPoint("BOTTOM", eaf, "TOP" ,0, 0);
+			--eaf.spellTimer:SetPoint("TOP", 0, EA_Config.TimerFontSize)		
+			eaf.spellTimer:SetPoint("BOTTOM", eaf, "TOP" ,0, 0)
 		end
 		if (EA_timeLeft < SC_RedSecText + 1) then
 			
 			if (not eaf.redsectext) then				
 				--eaf.spellTimer:SetFont("Fonts\\FRIZQT__.TTF", 1*(EA_Config.TimerFontSize+5), "OUTLINE");
-				eaf.spellTimer:SetFont("Fonts\\FRIZQT__.TTF", (EA_Config.TimerFontSize+5), "OUTLINE");
-				eaf.spellTimer:SetTextColor(1, 0, 0);
-				eaf.redsectext = true;
-				eaf.whitesectext = false;
+				eaf.spellTimer:SetFont("Fonts\\FRIZQT__.TTF", (EA_Config.TimerFontSize+5), "OUTLINE")
+				eaf.spellTimer:SetTextColor(1, 0, 0)
+				eaf.redsectext = true
+				eaf.whitesectext = false
 			end
 		else
 			
@@ -2328,11 +2700,11 @@ function EAFun_SetCountdownStackText(eaf, EA_timeLeft, EA_count, SC_RedSecText)
 				--eaf.spellTimer:SetFont("Fonts\\FRIZQT__.TTF", 1*EA_Config.TimerFontSize, "OUTLINE");
 				eaf.spellTimer:SetFont("Fonts\\FRIZQT__.TTF",EA_Config.TimerFontSize, "OUTLINE");				
 				--eaf.spellTimer:SetTextColor(1, 1, 0);			--設定計時數字顏色為黃色
-				eaf.spellTimer:SetTextColor(1, 1, 1);			--設定計時數字顏色為白色
-				eaf.spellTimer:SetShadowColor(0, 0, 0);			--設定計時數字陰影為黑色
-				eaf.spellTimer:SetShadowOffset(2, -2);			--設定計時數字陰影偏移量(右移2下移2)
-				eaf.redsectext = false;
-				eaf.whitesectext = true;
+				eaf.spellTimer:SetTextColor(1, 1, 1)			--設定計時數字顏色為白色
+				eaf.spellTimer:SetShadowColor(0, 0, 0)		    --設定計時數字陰影為黑色
+				eaf.spellTimer:SetShadowOffset(2, -2)		    --設定計時數字陰影偏移量(右移2下移2)
+				eaf.redsectext = false
+				eaf.whitesectext = true
 			end
 		end		
 		eaf.spellTimer:SetText(EAFun_GetFormattedTime(EA_timeLeft));
@@ -2457,8 +2829,15 @@ function EventAlert_UpdateFocus()
 				end
 				eaf1.spellTimer:SetFont("Fonts\\FRIZQT__.TTF", EA_Config.TimerFontSize, "OUTLINE");
 				eaf1.spellTimer:SetText(iUnitPower);
-					
-				eaf1:SetScript("OnUpdate",EventAlert_UndateFocus)
+				
+				eaf1:SetScript("OnUpdate", function(self,elapsedTime)
+					EventAlert_TimeSinceUpdate_Focus = EventAlert_TimeSinceUpdate_Focus + elapsedTime
+					if EventAlert_TimeSinceUpdate_Focus > EventAlert_UpdateInterval then
+						EventAlert_UpdateFocus()
+						EventAlert_TimeSinceUpdate_Focus = 0
+					end
+				end);
+				--eaf1:SetScript("OnUpdate",EventAlert_UndateFocus)
 			else
 				FrameGlowShowOrHide(eaf1, false)
 				EA_SpecFrame_Self = false;
@@ -2490,8 +2869,14 @@ function EventAlert_UpdateFocus()
 				if EA_Config.HUNTER_GlowPetFocus > 0 then
 					FrameGlowShowOrHide(eaf2, (iPetPower >= EA_Config.HUNTER_GlowPetFocus))										
 				end
-					
-				eaf2:SetScript("OnUpdate",EventAlert_UndateFocus)
+				eaf2:SetScript("OnUpdate", function(self,elapsedTime)
+					EventAlert_TimeSinceUpdate_PetFocus = EventAlert_TimeSinceUpdate_PetFocus + elapsedTime
+					if EventAlert_TimeSinceUpdate_PetFocus > EventAlert_UpdateInterval then
+						EventAlert_UpdateFocus()
+						EventAlert_TimeSinceUpdate_PetFocus = 0
+					end				
+				end);
+				--eaf2:SetScript("OnUpdate",EventAlert_UndateFocus)
 			else
 				EA_SpecFrame_Self = false
 				FrameGlowShowOrHide(eaf2, false)
@@ -2520,16 +2905,20 @@ function EventAlert_UpdateRunes()
 		local eaf={}
 		
 		EA_SpecFrame_Self = true
-		
+		local RunesFrame = EA_SpecPower.Runes.frameindex
+		local IconSize = EA_Config.IconSize
+		local TimerFontSize = EA_Config.TimerFontSize
+		local GetRuneCooldown = GetRuneCooldown
+		local GetTime = GetTime
 		for i=1,MAX_RUNES do
-			eaf[i]=_G["EAFrameSpec_"..EA_SpecPower.Runes.frameindex[i]]
+			eaf[i]=_G["EAFrameSpec_"..RunesFrame[i]]
 			if not(eaf[i]) then
-				CreateFrames_SpecialFrames_Show(EA_SpecPower.Runes.frameindex[i])
-				eaf[i]=_G["EAFrameSpec_"..EA_SpecPower.Runes.frameindex[i]]
+				CreateFrames_SpecialFrames_Show(RunesFrame[i])
+				eaf[i]=_G["EAFrameSpec_"..RunesFrame[i]]
 			end
 			if eaf[i] then
-				eaf[i]:SetWidth(EA_Config.IconSize*0.8)
-				eaf[i]:SetHeight(EA_Config.IconSize*0.8)
+				eaf[i]:SetWidth(IconSize * 0.8)
+				eaf[i]:SetHeight(IconSize * 0.8)
 				if (eaf[i]:IsShown()==false) then					
 					eaf[i]:Show()
 				end			
@@ -2543,7 +2932,7 @@ function EventAlert_UpdateRunes()
 				
 				--eaf[i]:SetPoint(EA_Position.Anchor, prevFrame, EA_Position.Anchor, (i-MAX_RUNES-3) * xOffset * 0.6, (i-MAX_RUNES-3) * yOffset*0.6);
 				
-				eaf[i]:SetPoint(EA_Position.Anchor, prevFrame, EA_Position.Anchor, EA_Config.IconSize+(i-2) * xOffset*0.6, EA_Config.IconSize+(i-2) * yOffset*0.6)
+				eaf[i]:SetPoint(EA_Position.Anchor, prevFrame, EA_Position.Anchor, IconSize+(i-2) * xOffset*0.6, IconSize+(i-2) * yOffset*0.6)
 								
 				--if not(eaf[i]:GetBackdrop()) then						
 					eaf[i]:SetBackdrop({bgFile=iconTextures[iRuneType]});					
@@ -2561,7 +2950,7 @@ function EventAlert_UpdateRunes()
 				if (EA_Config.ChangeTimer == true) then
 					eaf[i].spellTimer:SetPoint("CENTER", 0, 0);
 				else
-					eaf[i].spellTimer:SetPoint("TOP", 0, EA_Config.TimerFontSize*0.5);
+					eaf[i].spellTimer:SetPoint("TOP", 0, TimerFontSize*0.5);
 				end
 				
 				--RuneCount = UnitPower("player",EA_SPELL_POWER_RUNES)
@@ -2590,7 +2979,14 @@ function EventAlert_UpdateRunes()
 				end			
 				
 				if not(eaf[i]:HasScript("OnUpdate")) then 
-					eaf[i]:SetScript("OnUpdate",EventAlert_UpdateRunes)
+					eaf[i]:SetScript("OnUpdate", function(self,elapsedTime)
+					EventAlert_TimeSinceUpdate_Runes = EventAlert_TimeSinceUpdate_Runes + elapsedTime
+					if EventAlert_TimeSinceUpdate_Runes > EventAlert_UpdateInterval then
+						EventAlert_UpdateRunes()
+						EventAlert_TimeSinceUpdate_Runes = 0
+					end
+					end);
+					--eaf[i]:SetScript("OnUpdate",EventAlert_UpdateRunes)
 				end	
 				
 				if (eaf[i]:IsShown()==false) then
@@ -2848,7 +3244,7 @@ function EventAlert_UpdateLifeBloom(EA_Unit)
 				local SfontName, SfontSize = "", 0;
 
 				for i=1,40 do
-					local _, _, count, _, _, expirationTime, unitCaster, _, _, spellID = UnitBuff(EA_Unit, i)
+					local _,  _, count, _, _, expirationTime, unitCaster, _, _, spellID = UnitBuff(EA_Unit, i)
 					if (not spellID) then
 						break;
 					end
@@ -2888,7 +3284,14 @@ function EventAlert_UpdateLifeBloom(EA_Unit)
 					else
 						eaf.spellName:SetText("");
 					end
-					eaf:SetScript("OnUpdate", EventAlert_OnLifeBloomUpdate);
+					eaf:SetScript("OnUpdate", function(self,elapsedTime)
+					EventAlert_TimeSinceUpdate_LifeBloom =EventAlert_TimeSinceUpdate_LifeBloom + elapsedTime
+					if EventAlert_TimeSinceUpdate_LifeBloom > EventAlert_UpdateInterval then
+						EventAlert_OnLifeBloomUpdate()
+						EventAlert_TimeSinceUpdate_LifeBloom = 0
+					end
+					end);
+					--eaf:SetScript("OnUpdate", EventAlert_OnLifeBloomUpdate);
 					eaf:Show();
 				end
 				EventAlert_PositionFrames();
@@ -2974,23 +3377,29 @@ function EventAlert_Lookup(para1, fullmatch)
 	DEFAULT_CHAT_FRAME:AddMessage(EA_XLOOKUP_START1..": [\124cffFFFF00"..para1.."\124r]"..sFMatch)
 	EAFun_ClearSpellScrollFrame()
 	
-	for i=1,1000000 do		
-		sName = GetSpellInfo(i)		
-		fGoPrint = false
-		if (sName ~= nil) then			
-			if (fullmatch) then
-				if (sName == para1) then fGoPrint = true end;
-			else
-				if (strfind(sName, para1)) then fGoPrint = true end;
-			end
-			if (fGoPrint) then
-				sSpellLink = GetSpellLink(i)
-				if (sSpellLink ~= nil) then
-					iCount = iCount + 1;
-					-- DEFAULT_CHAT_FRAME:AddMessage("["..tostring(iCount).."]\124cffFFFF00"..EA_XCMD_DEBUG_P2.."\124r="..tostring(i).." / \124cffFFFF00"..EA_XCMD_DEBUG_P1.."\124r="..sSpellLink);
-					EAFun_AddSpellToScrollFrame(i, "")
+	local strfind = strfind
+	local DoesItemExistByID = C_Spell.DoesSpellExist
+	local GetSpellInfo = GetSpellInfo
+	local GetSpellLink = GetSpellLink
+	for i=1,1000000 do	
+		if DoesSpellExist(i) then
+			sName = GetSpellInfo(i)		
+			fGoPrint = false
+			if (sName ~= nil) then			
+				if (fullmatch) then
+					if (sName == para1) then fGoPrint = true end
+				else
+					if (strfind(sName, para1)) then fGoPrint = true end
 				end
-			end		
+				if (fGoPrint) then
+					sSpellLink = GetSpellLink(i)
+					if (sSpellLink ~= nil) then
+						iCount = iCount + 1
+						-- DEFAULT_CHAT_FRAME:AddMessage("["..tostring(iCount).."]\124cffFFFF00"..EA_XCMD_DEBUG_P2.."\124r="..tostring(i).." / \124cffFFFF00"..EA_XCMD_DEBUG_P1.."\124r="..sSpellLink);
+						EAFun_AddSpellToScrollFrame(i, "")
+					end
+				end		
+			end
 		end
 	end
 	EA_Version_Frame:Show();
@@ -3002,9 +3411,10 @@ function EAFun_AddSpellToScrollFrame(spellID, OtherMessage)
 	if OtherMessage == nil then OtherMessage = "" end;
 	if EA_ShowScrollSpells[spellID] == nil then
 		EA_ShowScrollSpells[spellID] = true;
-		local EA_name, _,EA_icon = GetSpellInfo(spellID);
+		local EA_name = GetSpellInfo(spellID)
+		local EA_icon = GetSpellTexture(spellID)
 		if EA_name == nil then EA_name = "" end;
-
+		
 		local f1 = _G["EA_Version_ScrollFrame_Icon_"..spellID];
 		if f1 == nil then
 			EA_ShowScrollSpell_YPos = EA_ShowScrollSpell_YPos - 25;
@@ -3037,8 +3447,9 @@ function EAFun_AddSpellToScrollFrame(spellID, OtherMessage)
 			ShowScrollEditBox:SetHeight(25);
 			ShowScrollEditBox:SetMaxLetters(0);
 			ShowScrollEditBox:SetAutoFocus(false);
-				-- ShowScrollEditBox:SetText(EA_name.." ["..spellID.."]1".." ["..spellID.."]2".." ["..spellID.."]3".." ["..spellID.."]4".." ["..spellID.."]5".." ["..spellID.."]6".." ["..spellID.."]7".." ["..spellID.."]8".." ["..spellID.."]9"..OtherMessage);
+			
 			ShowScrollEditBox:SetText(EA_name.." ["..spellID.."]"..OtherMessage);
+			
 			local function ShowScrollEditBoxGameToolTip()
 				ShowScrollEditBox:SetTextColor(0, 1, 1);
 				GameTooltip:SetOwner(ShowScrollEditBox, "ANCHOR_TOPLEFT");
@@ -3094,9 +3505,11 @@ function EAFun_GetCountOfTable(EAItems)
 end
 -----------------------------------------------------------------
 function EAFun_GetUnitIDByName(EA_UnitName)
-	local fNotFound, iIndex = true, 1;
-	local sUnitID, sUnitName = "", "";
-
+	local fNotFound, iIndex = true, 1
+	local sUnitID, sUnitName = "", ""
+	local UnitName = UnitName
+	local UnitType = UnitType
+	local GetNumSubgroupMembers = GetNumSubgroupMembers
 	if UnitInRaid("player") then
 		iIndex = 1;
 		while (fNotFound and iIndex <= 40) do
@@ -3115,7 +3528,7 @@ function EAFun_GetUnitIDByName(EA_UnitName)
 			iIndex = iIndex + 1;
 		end
 	end
-
+	
 	if (fNotFound) then
 		local UnitType={"mouseover","target","focus"}
 		for i=1,#UnitType do
@@ -3131,10 +3544,11 @@ function EAFun_GetUnitIDByName(EA_UnitName)
 end
 -----------------------------------------------------------------
 function EAFun_HookTooltips()
+	local GameTooltip = GameTooltip
 	hooksecurefunc(GameTooltip, "SetUnitBuff", function(self,...)
 		local id = select(10,UnitBuff(...))
 		if id then
-			self:AddDoubleLine(EX_XCLSALERT_SPELL,id)
+			self:AddDoubleLine("(EAM)"..EX_XCLSALERT_SPELL,id)
 			self:Show()
 		end
 	end)
@@ -3142,7 +3556,7 @@ function EAFun_HookTooltips()
 	hooksecurefunc(GameTooltip, "SetUnitDebuff", function(self,...)
 		local id = select(10,UnitDebuff(...))
 		if id then
-			self:AddDoubleLine(EX_XCLSALERT_SPELL,id)
+			self:AddDoubleLine("(EAM)"..EX_XCLSALERT_SPELL,id)
 			self:Show()
 		end
 	end)
@@ -3150,28 +3564,65 @@ function EAFun_HookTooltips()
 	hooksecurefunc(GameTooltip, "SetUnitAura", function(self,...)
 		local id = select(10,UnitAura(...))
 		if id then
-			self:AddDoubleLine(EX_XCLSALERT_SPELL,id)
+			self:AddDoubleLine("(EAM)"..EX_XCLSALERT_SPELL,id)
 			self:Show()
 		end
 	end)
-	local function ParseHyperLink(link)
-		local name, value = string.match(link or "", "|?H?(%a+):(%d+):")
-		if (name and value) then
-			return name:gsub("^([a-z])", strupper), value
+	hooksecurefunc(GameTooltip, "SetBagItem", function(self,bag,slot)		
+		local itemID = GetContainerItemID(bag,slot)
+		if itemID then
+			self:AddDoubleLine("(EAM)ItemID:",itemID)			
+			self:Show()
 		end
-	end
+		local _,id = GetItemSpell(itemID)
+		if id then			
+			self:AddDoubleLine("(EAM)"..EX_XCLSALERT_SPELL,id)			
+			self:Show()
+		end
+	end)
+	
+	hooksecurefunc(GameTooltip, "SetInventoryItem", function(self,unit,invslot)		
+		local itemID = GetInventoryItemID(unit,invslot)
+		if itemID then
+			self:AddDoubleLine("(EAM)ItemID:",itemID)			
+			self:Show()
+		end
+		local _,id = GetItemSpell(itemID)
+		if id then			
+			self:AddDoubleLine("(EAM)"..EX_XCLSALERT_SPELL,id)			
+			self:Show()
+		end
+	end)
+
 	hooksecurefunc("SetItemRef", function(link, text, button, chatFrame)
-		if string.find(link,"^spell:") then
-			local id = select(2,ParseHyperLink(link))
-			ItemRefTooltip:AddDoubleLine(EX_XCLSALERT_SPELL,id)
+		local itemID
+		
+		itemID = tonumber(string.match(link,"item:%d+"))
+		if itemID then		
+			ItemRefTooltip:AddDoubleLine("(EAM)ItemID:",itemID)
 			ItemRefTooltip:Show()
+		end
+		if string.find(link,"^spell:") then
+			
+			local id = string.sub(link,7)
+			if id then
+				ItemRefTooltip:AddDoubleLine("(EAM)"..EX_XCLSALERT_SPELL,id)
+				ItemRefTooltip:Show()
+			end
+		else
+			local name,id = GetItemSpell(itemID)			
+			if id then
+				ItemRefTooltip:AddDoubleLine("(EAM)"..EX_XCLSALERT_SPELL,id)
+				ItemRefTooltip:Show()
+			end
 		end
 	end)
 
 	GameTooltip:HookScript("OnTooltipSetSpell", function(self)
+		
 		local id = select(2,self:GetSpell())
 		if id then
-			self:AddDoubleLine(EX_XCLSALERT_SPELL,id)
+			self:AddDoubleLine("(EAM)"..EX_XCLSALERT_SPELL,id)
 			self:Show()
 		end
 	end)
@@ -3183,6 +3634,10 @@ function EAFun_SortCurrBuffs(TypeIndex, EACurrBuffs)
 	local SortArray = {};
 	local OrderWtd = 1;
 	
+	local tinsert = table.insert
+	local EA_SPELLINFO_SELF = EA_SPELLINFO_SELF
+	local EA_SPELLINFO_TARGET = EA_SPELLINFO_TARGET
+	local EA_SPELLINFO_SCD = EA_SPELLINFO_SCD
 	for Loopi=1, #EACurrBuffs do
 		local spellId = EACurrBuffs[Loopi]
 		if (TypeIndex == 1) then
@@ -3197,14 +3652,14 @@ function EAFun_SortCurrBuffs(TypeIndex, EACurrBuffs)
 		if (OrderWtd == nil) then OrderWtd = 1 end;
 
 		if TempArray[OrderWtd] == nil then TempArray[OrderWtd] = {} end;
-		table.insert(TempArray[OrderWtd], EACurrBuffs[Loopi]);
+		tinsert(TempArray[OrderWtd], EACurrBuffs[Loopi]);
 	end
 
 	for Loopi=20,1,-1 do
 		if TempArray[Loopi] ~= nil then
 			for Loopj=1,#TempArray[Loopi] do
 				if TempArray[Loopi][Loopj] ~= nil then
-					table.insert(SortArray, TempArray[Loopi][Loopj]);
+					tinsert(SortArray, TempArray[Loopi][Loopj]);
 				end
 			end
 		end
@@ -3539,21 +3994,22 @@ function EventAlert_GroupFrameCheck_OnEvent(self, event, ...)
 							end
 						end
 					end
+					
 					if (fShowResult) then
 						sAuraFilter = "";
 						if (SubCheck.CastByPlayer ~= nil) then
 							if (SubCheck.CastByPlayer) then
-								sAuraFilter = "PLAYER";
+								sAuraFilter = "|PLAYER";
 							end
 						end
 						if (SubCheck.CheckAuraExist ~= nil) then
 							fShowResult = false;
 							local sSpellName = GetSpellInfo(SubCheck.CheckAuraExist);
-							local sCurrSpellName, _, iStack, _, _, iExpireTime = LibAura.UnitBuff(sSpellName,sUnitType, sAuraFilter);
+							local sCurrSpellName,  _, iStack, _, _, iExpireTime = AuraUtil.FindAuraByName(sSpellName,sUnitType, "HELPFUL"..sAuraFilter)
 							if sCurrSpellName ~= nil then
 								fShowResult = true;
 							else
-								sCurrSpellName, _, iStack, _, _, iExpireTime = LibAura.UnitDebuff(sSpellName,sUnitType, sAuraFilter);
+								sCurrSpellName, _, iStack, _, _, iExpireTime = AuraUtil.FindAuraByName(sSpellName,sUnitType, "HARMFUL"..sAuraFilter)
 								if sCurrSpellName ~= nil then
 									fShowResult = true;
 								end
@@ -3574,9 +4030,9 @@ function EventAlert_GroupFrameCheck_OnEvent(self, event, ...)
 						if (SubCheck.CheckAuraNotExist ~= nil) then
 							fShowResult = false;
 							local sSpellName = GetSpellInfo(SubCheck.CheckAuraNotExist);
-							local sCurrSpellName = LibAura.UnitBuff(sSpellName, sUnitType, sAuraFilter);
+							local sCurrSpellName = AuraUtil.FindAuraByName(sSpellName,sUnitType, "HELPFUL"..sAuraFilter)
 							if sCurrSpellName == nil then
-								sCurrSpellName = LibAura.UnitDebuff(sSpellName, sUnitType, sAuraFilter);
+								sCurrSpellName = AuraUtil.FindAuraByName(sSpellName,sUnitType, "HARMFUL"..sAuraFilter)
 								if sCurrSpellName == nil then
 									fShowResult = true;
 								end
@@ -3643,6 +4099,7 @@ end
 --]]
 function EventAlert_PlayerSpecPower_Update()
 
+	local EA_SpecPower = EA_SpecPower
 	for p,tblPower in pairs(EA_SpecPower) do
 		if (tblPower) then
 			tblPower.has = false
@@ -3747,7 +4204,8 @@ function EventAlert_PlayerSpecPower_Update()
 end
 
 function EventAlert_SpecialFrame_Update()
-		
+	local type = type
+	local SpecPowerCheck = EA_Config.SpecPowerCheck
 	for k,tblPower in pairs(EA_SpecPower) do
 		
 		--if (type(tblPower)=="table") and (EA_Config.SpecPowerCheck[k]) and (tblPower.has) then
@@ -3755,7 +4213,7 @@ function EventAlert_SpecialFrame_Update()
 			
 			if(tblPower.frameindex) then
 				for k2,f in pairs(tblPower.frameindex) do					
-					if ( f and (EA_Config.SpecPowerCheck[k]) and (tblPower.has) ) then
+					if ( f and (SpecPowerCheck[k]) and (tblPower.has) ) then
 						CreateFrames_SpecialFrames_Show(f)				
 					else
 						CreateFrames_SpecialFrames_Hide(f)
@@ -3769,7 +4227,7 @@ function EventAlert_SpecialFrame_Update()
 end
 --取得法術ID在指定單位身上的BUFF索引
 function GetBuffIndexOfSpellID(unit,SID)
-
+	local UnitBuff = UnitBuff
 	for i=1,40 do
 			local name, icon, count, debuffType, duration, expirationTime, unitCaster, isStealable, nameplateShowPersonal, spellID, canApplyAura, isBossDebuff, _, nameplateShowAll, timeMod, value1, value2, value3 = UnitBuff(unit,i)
 			
@@ -3781,6 +4239,7 @@ function GetBuffIndexOfSpellID(unit,SID)
 end
 --取得法術ID在指定單位身上的DEBUFF索引
 function GetDebuffIndexOfSpellID(unit,SID)
+	local UnitDebuff = UnitDebuff
 	for i=1,40 do
 		local name, icon, count, debuffType, duration, expirationTime, unitCaster, isStealable, nameplateShowPersonal, spellID, canApplyAura, isBossDebuff, _, nameplateShowAll, timeMod, value1, value2, value3  = UnitDebuff(unit,i)
 		if (SID == spellID)	then 
@@ -3833,9 +4292,11 @@ function FrameAppendSpellTip(eaf,spellID)
 end
 -----------------------------------------------------------------
 function RemoveAllScdCurrentBuff()
-
+	local GetSpellInfo = GetSpellInfo
+	local GetSpellTexture = GetSpellTexture
+	local tonumber = tonumber
 	for k,v in ipairs(EA_ScdCurrentBuffs) do
-		local SpellName,_,SpellIcon=GetSpellInfo(v)
+		local SpellName,SpellIcon = GetSpellInfo(v),GetSpellTexture(v)
 		local HasSpell=GetSpellInfo(SpellName)
 		if HasSpell==nil then
 
@@ -3851,7 +4312,7 @@ function RemoveAllScdCurrentBuff()
 end
 function RemoveSingleSCDCurrentBuff(spellID)
 
-		local SpellName,_,SpellIcon=GetSpellInfo(spellID)
+		local SpellName,SpellIcon=GetSpellInfo(spellID),GetSpellTexture(spellID)
 		local HasSpell=GetSpellInfo(SpellName)
 		--if HasSpell==nil then
 			
@@ -3867,9 +4328,11 @@ function RemoveSingleSCDCurrentBuff(spellID)
 end
 -----------------------------------------------------------------
 function ShowAllScdCurrentBuff()
-
+	local GetSpellInfo = GetSpellInfo
+	local GetSpellTexture = GetSpellTexture
+	local tonumber = tonumber
 	for k,v in ipairs(EA_ScdCurrentBuffs) do
-		local SpellName,SpellIcon=GetSpellInfo(v)
+		local SpellName,SpellIcon=GetSpellInfo(v),GetSpellTexture(v)
 		local HasSpell=GetSpellInfo(SpellName)
 
 		local eaf = _G["EAScdFrame_"..v];
@@ -3881,9 +4344,11 @@ function ShowAllScdCurrentBuff()
 end
 -----------------------------------------------------------------
 function HideAllScdCurrentBuff()
-
+	local GetSpellInfo = GetSpellInfo
+	local GetSpellTexture = GetSpellTexture
+	local tonumber = tonumber
 	for k,v in ipairs(EA_ScdCurrentBuffs) do
-		local SpellName,_,SpellIcon=GetSpellInfo(v)
+		local SpellName,SpellIcon=GetSpellInfo(v),GetSpellTexture(v)
 		local HasSpell=GetSpellInfo(SpellName)
 		local eaf = _G["EAScdFrame_"..v];
 		local spellID = tonumber(v);
@@ -4021,11 +4486,11 @@ EA_EventList={
 		--["UNIT_COMBO_POINTS"]			= EventAlert_COMBO_POINTS,
 		["UNIT_DISPLAYPOWER"]			= EventAlert_DISPLAYPOWER,
 		["UNIT_HEALTH"]					= EventAlert_UNIT_HEALTH	,
-		["UNIT_POWER_UPDATE"]					= EventAlert_UNIT_POWER_UPDATE,
-		["UNIT_POWER_FREQUENT"]			= EventAlert_UNIT_POWER,
+		["UNIT_POWER_UPDATE"]			= EventAlert_UNIT_POWER_UPDATE,
+		["UNIT_POWER_FREQUENT"]			= EventAlert_UNIT_POWER_UPDATE,
 		["RUNE_TYPE_UPDATE"]			= EventAlert_UpdateRunes,
 		["RUNE_POWER_UPDATE"]			= EventAlert_UpdateRunes,
-		["UNIT_SPELLCAST_SUCCEEDED"]	= EventAlert_UNIT_SPELLCAST_SUCCEEDED,
+		--["UNIT_SPELLCAST_SUCCEEDED"]	= EventAlert_UNIT_SPELLCAST_SUCCEEDED,
 		["UNIT_SPELLCAST_CAST"]			= EventAlert_UNIT_SPELLCAST_CAST	,
 		["PLAYER_TOTEM_UPDATE"]			= EventAlert_UNIT_PLAYER_TOTEM_UPDATE	,
 		
@@ -4034,7 +4499,7 @@ EA_EventList={
 EA_EventList_COMBAT_LOG_EVENT_UNFILTERED = {
 		["SPELL_AURA_REFRESH"]			= EventAlert_COMBAT_LOG_EVENT_SPELL_AURA_REFRESH,
 		["SPELL_SUMMON"]				= EventAlert_COMBAT_LOG_EVENT_SPELL_SUMMON,
-		["UNIT_CAST_SUCCESS"]			= EventAlert_COMBAT_LOG_EVENT_UNIT_CAST_SUCCESS
+		["SPELL_CAST_SUCCESS"]			= EventAlert_COMBAT_LOG_EVENT_SPELL_CAST_SUCCESS
 }
 -----------------------------------------------------------------
 EA_SpecPower = {

@@ -1,3 +1,4 @@
+if LibDebug then LibDebug() end
 -- The first event of this UI(Event sequence : "Onload"->"ADDON_LOADED")
 function EventAlert_OnLoad(self)
 	

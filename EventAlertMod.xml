@@ -1,6 +1,5 @@
-<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/
-..\FrameXML\UI.xsd">
-	
+<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/ ..\FrameXML\UI.xsd">
+
 	<Script file="EventAlert_CreateFrames.lua" />	
 	<Script file="EventAlert_SpellArray.lua" />	
 	<Script file="EventAlert_LoadDefault.lua" />	
@@ -13,11 +12,11 @@
 		</Size>
 		<Scripts>
 			<OnLoad>
-			EventAlert_OnLoad(self);
-		</OnLoad>
+				EventAlert_OnLoad(self);
+			</OnLoad>
 			<OnEvent>
-			EventAlert_OnEvent(self, event, ...);
-		</OnEvent>
+				EventAlert_OnEvent(self, event, ...);
+			</OnEvent>
 		</Scripts>
 	</Frame>
 	<Frame name="EA_Version_Frame" hidden="true" parent="UIParent" movable="true" frameStrata="HIGH">

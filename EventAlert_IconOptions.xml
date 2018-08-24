@@ -1,5 +1,4 @@
-<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/
-..\FrameXML\UI.xsd">
+<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/ ..\FrameXML\UI.xsd">
 	<Script file="EventAlert_IconOptions.lua" />
 	<Frame name="EA_Icon_Options_Frame" hidden="true" parent="EA_Options_Frame" toplevel="true" movable="true" frameStrata="HIGH" enableMouse="true" enableKeyboard="true">
 		<Size>
@@ -20,7 +19,7 @@
 			</EdgeSize>
 		</Backdrop>
 		<Frames>
-			<CheckButton name="$parent_LockFrame" inherits="InterfaceOptionsCheckButtonTemplate">
+			<CheckButton name="$parent_LockFrame" inherits="OptionsCheckButtonTemplate">
 				<Anchors>
 					<Anchor point="TOPLEFT">
 						<Offset>
@@ -48,7 +47,7 @@
 					</OnLeave>
 				</Scripts>
 			</CheckButton>
-			<CheckButton name="$parent_ShareSettings" inherits="InterfaceOptionsCheckButtonTemplate">
+			<CheckButton name="$parent_ShareSettings" inherits="OptionsCheckButtonTemplate">
 				<Anchors>
 					<Anchor point="TOPLEFT" relativeTo="$parent_LockFrame" relativePoint="TOPRIGHT">
 						<Offset>
@@ -256,7 +255,7 @@
 					</OnLeave>
 				</Scripts>
 			</Slider>
-			<CheckButton name="$parent_PlayerLv2BOSS" inherits="InterfaceOptionsCheckButtonTemplate">
+			<CheckButton name="$parent_PlayerLv2BOSS" inherits="OptionsCheckButtonTemplate">
 				<Anchors>
 					<Anchor point="TOPLEFT" relativeTo="$parent_IconExecution" relativePoint="TOPRIGHT">
 						<Offset>
@@ -284,7 +283,7 @@
 					</OnLeave>
 				</Scripts>
 			</CheckButton>
-			<CheckButton name="$parent_SCD_UseCooldown" inherits="InterfaceOptionsCheckButtonTemplate">
+			<CheckButton name="$parent_SCD_UseCooldown" inherits="OptionsCheckButtonTemplate">
 				<Anchors>
 					<Anchor point="TOPLEFT" relativeTo="$parent_IconExecution" relativePoint="BOTTOMLEFT">
 						<Offset>
@@ -312,7 +311,7 @@
 					</OnLeave>
 				</Scripts>
 			</CheckButton>
-			<CheckButton name="$parent_SpecFlag_HolyPower" inherits="InterfaceOptionsCheckButtonTemplate">
+			<CheckButton name="$parent_SpecFlag_HolyPower" inherits="OptionsCheckButtonTemplate">
 				<Anchors>
 					<Anchor point="TOPLEFT" relativeTo="$parent_SCD_UseCooldown" relativePoint="BOTTOMLEFT">
 						<Offset>
@@ -339,7 +338,7 @@
 					</OnLeave>
 				</Scripts>
 			</CheckButton>
-			<CheckButton name="$parent_SpecFlag_RunicPower" inherits="InterfaceOptionsCheckButtonTemplate">
+			<CheckButton name="$parent_SpecFlag_RunicPower" inherits="OptionsCheckButtonTemplate">
 				<Anchors>
 					<Anchor point="TOPLEFT" relativeTo="$parent_SpecFlag_HolyPower" relativePoint="TOPRIGHT">
 						<Offset>
@@ -365,7 +364,7 @@
 					</OnLeave>
 				</Scripts>
 			</CheckButton>
-			<CheckButton name="$parent_SpecFlag_SoulShards" inherits="InterfaceOptionsCheckButtonTemplate">
+			<CheckButton name="$parent_SpecFlag_SoulShards" inherits="OptionsCheckButtonTemplate">
 				<Anchors>
 					<Anchor point="TOPLEFT" relativeTo="$parent_SpecFlag_HolyPower" relativePoint="BOTTOMLEFT">
 						<Offset>
@@ -391,7 +390,7 @@
 					</OnLeave>
 				</Scripts>
 			</CheckButton>
-			<CheckButton name="$parent_SpecFlag_LunarPower" inherits="InterfaceOptionsCheckButtonTemplate">
+			<CheckButton name="$parent_SpecFlag_LunarPower" inherits="OptionsCheckButtonTemplate">
 				<Anchors>
 					<Anchor point="TOPLEFT" relativeTo="$parent_SpecFlag_SoulShards" relativePoint="TOPRIGHT">
 						<Offset>
@@ -416,7 +415,7 @@
 					</OnLeave>
 				</Scripts>
 			</CheckButton>
-			<CheckButton name="$parent_SpecFlag_ComboPoint" inherits="InterfaceOptionsCheckButtonTemplate">
+			<CheckButton name="$parent_SpecFlag_ComboPoint" inherits="OptionsCheckButtonTemplate">
 				<Anchors>
 					<Anchor point="TOPLEFT" relativeTo="$parent_SpecFlag_SoulShards" relativePoint="BOTTOMLEFT">
 						<Offset>
@@ -442,7 +441,7 @@
 					</OnLeave>
 				</Scripts>
 			</CheckButton>
-			<CheckButton name="$parent_SpecFlag_LifeBloom" inherits="InterfaceOptionsCheckButtonTemplate">
+			<CheckButton name="$parent_SpecFlag_LifeBloom" inherits="OptionsCheckButtonTemplate">
 				<Anchors>
 					<Anchor point="TOPLEFT" relativeTo="$parent_SpecFlag_ComboPoint" relativePoint="TOPRIGHT">
 						<Offset>
@@ -468,7 +467,7 @@
 					</OnLeave>
 				</Scripts>
 			</CheckButton>
-			<CheckButton name="$parent_SpecFlag_LightForce" inherits="InterfaceOptionsCheckButtonTemplate">
+			<CheckButton name="$parent_SpecFlag_LightForce" inherits="OptionsCheckButtonTemplate">
 				<Anchors>
 					<Anchor point="TOPLEFT" relativeTo="$parent_SpecFlag_ComboPoint" relativePoint="BOTTOMLEFT">
 						<Offset>
@@ -494,7 +493,7 @@
 					</OnLeave>
 				</Scripts>
 			</CheckButton>
-			<CheckButton name="$parent_SpecFlag_Energy" inherits="InterfaceOptionsCheckButtonTemplate">
+			<CheckButton name="$parent_SpecFlag_Energy" inherits="OptionsCheckButtonTemplate">
 				<Anchors>
 					<Anchor point="TOPLEFT" relativeTo="$parent_SpecFlag_LightForce" relativePoint="TOPRIGHT">
 						<Offset>
@@ -519,7 +518,7 @@
 					</OnLeave>
 				</Scripts>
 			</CheckButton>
-			<CheckButton name="$parent_SpecFlag_Rage" inherits="InterfaceOptionsCheckButtonTemplate">
+			<CheckButton name="$parent_SpecFlag_Rage" inherits="OptionsCheckButtonTemplate">
 				<Anchors>
 					<Anchor point="TOPLEFT" relativeTo="$parent_SpecFlag_LightForce" relativePoint="BOTTOMLEFT">
 						<Offset>
@@ -545,7 +544,7 @@
 					</OnLeave>
 				</Scripts>
 			</CheckButton>
-			<CheckButton name="$parent_SpecFlag_Focus" inherits="InterfaceOptionsCheckButtonTemplate">
+			<CheckButton name="$parent_SpecFlag_Focus" inherits="OptionsCheckButtonTemplate">
 				<Anchors>
 					<Anchor point="TOPLEFT" relativeTo="$parent_SpecFlag_Rage" relativePoint="TOPRIGHT">
 						<Offset>
@@ -572,7 +571,7 @@
 					</OnLeave>
 				</Scripts>
 			</CheckButton>
-			<CheckButton name="$parent_SpecFlag_Insanity" inherits="InterfaceOptionsCheckButtonTemplate">
+			<CheckButton name="$parent_SpecFlag_Insanity" inherits="OptionsCheckButtonTemplate">
 				<Anchors>
 					<Anchor point="TOPLEFT" relativeTo="$parent_SpecFlag_Rage" relativePoint="BOTTOMLEFT">
 						<Offset>
@@ -598,7 +597,7 @@
 					</OnLeave>
 				</Scripts>
 			</CheckButton>
-			<CheckButton name="$parent_SpecFlag_ArcaneCharges" inherits="InterfaceOptionsCheckButtonTemplate">
+			<CheckButton name="$parent_SpecFlag_ArcaneCharges" inherits="OptionsCheckButtonTemplate">
 				<Anchors>
 					<Anchor point="TOPLEFT" relativeTo="$parent_SpecFlag_Insanity" relativePoint="TOPRIGHT">
 						<Offset>
@@ -624,7 +623,7 @@
 					</OnLeave>
 				</Scripts>
 			</CheckButton>
-			<CheckButton name="$parent_SpecFlag_Maelstrom" inherits="InterfaceOptionsCheckButtonTemplate">
+			<CheckButton name="$parent_SpecFlag_Maelstrom" inherits="OptionsCheckButtonTemplate">
 				<Anchors>
 					<Anchor point="TOPLEFT" relativeTo="$parent_SpecFlag_Insanity" relativePoint="BOTTOMLEFT">
 						<Offset>
@@ -651,7 +650,7 @@
 					</OnLeave>
 				</Scripts>
 			</CheckButton>
-			<CheckButton name="$parent_SpecFlag_Runes" inherits="InterfaceOptionsCheckButtonTemplate">
+			<CheckButton name="$parent_SpecFlag_Runes" inherits="OptionsCheckButtonTemplate">
 				<Anchors>
 					<Anchor point="TOPLEFT" relativeTo="$parent_SpecFlag_Maelstrom" relativePoint="TOPRIGHT">
 						<Offset>
@@ -677,7 +676,7 @@
 					</OnLeave>
 				</Scripts>
 			</CheckButton>
-			<CheckButton name="$parent_SpecFlag_Fury" inherits="InterfaceOptionsCheckButtonTemplate">
+			<CheckButton name="$parent_SpecFlag_Fury" inherits="OptionsCheckButtonTemplate">
 				<Anchors>
 					<Anchor point="TOPLEFT" relativeTo="$parent_SpecFlag_RunicPower" relativePoint="TOPRIGHT">
 						<Offset>
@@ -703,7 +702,7 @@
 					</OnLeave>
 				</Scripts>
 			</CheckButton>
-			<CheckButton name="$parent_SpecFlag_Pain" inherits="InterfaceOptionsCheckButtonTemplate">
+			<CheckButton name="$parent_SpecFlag_Pain" inherits="OptionsCheckButtonTemplate">
 				<Anchors>
 					<Anchor point="TOPLEFT" relativeTo="$parent_SpecFlag_Fury" relativePoint="BOTTOMLEFT">
 						<Offset>
@@ -729,7 +728,7 @@
 					</OnLeave>
 				</Scripts>
 			</CheckButton>
-			<CheckButton name="$parent_SpecFlag_Focus_Pet" inherits="InterfaceOptionsCheckButtonTemplate">
+			<CheckButton name="$parent_SpecFlag_Focus_Pet" inherits="OptionsCheckButtonTemplate">
 				<Anchors>
 					<Anchor point="TOPLEFT" relativeTo="$parent_SpecFlag_Pain" relativePoint="BOTTOMLEFT">
 						<Offset>
