@@ -1575,6 +1575,8 @@ function EAFun_GroupEvent_ChangeEventType_Click(EventType, ExtraInfo)
 				local SubCheckCastByPlayerCheckBox = _G[sSubCheckFramePrefix.."_SubCheckCastByPlayerCheckBox"];
 				if (SubCheckCastByPlayerCheckBox == nil) then
 					SubCheckCastByPlayerCheckBox = CreateFrame("CheckButton", sSubCheckFramePrefix.."_SubCheckCastByPlayerCheckBox", SubEventFrame, "OptionsCheckButtonTemplate");
+					SubCheckCastByPlayerCheckBox:RegisterForClicks("LeftButtonDown")
+					SubCheckCastByPlayerCheckBox:SetScript("OnClick", function(self,button)end)
 				end	-- Get GroupItem Value
 					sDefaultValue = false;
 					fGetValue, sReturnValue = EAFun_GroupEvent_GetValueFromGroupItem("CastByPlayer", iSpellIndex, iCheckIndex, iSubCheckIndex);

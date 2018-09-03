@@ -263,6 +263,10 @@ EA_XCMD_DEBUG_P1 = "法術";
 EA_XCMD_DEBUG_P2 = "法術ID";
 EA_XCMD_DEBUG_P3 = "堆疊";
 EA_XCMD_DEBUG_P4 = "持續秒數";
+EA_XCMD_SPELL_DURATION_PATTERN1 = "在%d+%p?%d*秒"
+EA_XCMD_SPELL_DURATION_PATTERN2 = "持續%d+%p?%d*秒"
+EA_XCMD_SPELL_DURATION_PATTERN3 = "在%d+%p?%d*分"
+EA_XCMD_SPELL_DURATION_PATTERN4 = "持續%d+%p?%d*分"
 
 EA_XCMD_CMDHELP = {
 	["TITLE"] = "\124cffFFFF00EventAlertMod\124r \124cff00FF00指令\124r說明(/eventalertmod or /eam):",

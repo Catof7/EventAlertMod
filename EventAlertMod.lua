@@ -87,7 +87,7 @@ local EA_ADDONS_NAME = "EventAlertMod";
 --[[------------------------------------------------------------------
 For OnUpdate Using, only Gloabal Var.
 --------------------------------------------------------------------]]
-EventAlert_UpdateInterval 			= 0.1; --Second
+EventAlert_UpdateInterval 			= 0.08; --Second
 EventAlert_TimeSinceUpdate_Self 	= 0;
 EventAlert_TimeSinceUpdate_Target 	= 0;
 EventAlert_TimeSinceUpdate_SCD 		= 0;
@@ -344,25 +344,24 @@ end
 
 function EventAlert_CreateSpellItemCache(flagRenew)	
 	
-	local EA_SPELL_ITEM = EA_Config.EA_SPELL_ITEM 
 	local DoesItemExistByID = C_Item.DoesItemExistByID
 	local GetItemSpell = GetItemSpell
 	
 	--如果未建立過快取則建立快取
 	--如果flagRenew傳入true 則強迫重建快取
-	if EA_SPELL_ITEM then 
+	if EA_Config.EA_SPELL_ITEM then 
 		if not(flagRenew) then 			
 			return
 		end			
 	end
 	
-	EA_SPELL_ITEM = {}	
+	EA_Config.EA_SPELL_ITEM = {}	
 	for i = 1 , 999999 do 		
 		if DoesItemExistByID(i) then
 			--GetItemSpell()頗為耗時,故先以C_Item.DoesItemExistByID(i)過濾之
 			local _,s = GetItemSpell(i) 	
 			if s then 			
-				EA_SPELL_ITEM[s] = EA_SPELL_ITEM[s] or i
+				EA_Config.EA_SPELL_ITEM[s] = EA_Config.EA_SPELL_ITEM[s] or i
 			end
 		end
 	end
@@ -514,6 +513,7 @@ end
 function EventAlert_COMBAT_LOG_EVENT_SPELL_CAST_SUCCESS(...)
 	local timestp, event, hideCaster, surGUID, surName, surFlags, surRaidFlags, dstGUID, dstName, dstFlags, dstRaidFlags, spellID, spellName = ...			
 	EventAlert_ScdBuffs_Update(surName, spellName, spellID, timestp )
+	EventAlert_Buffs_Update(...)
 end
 
 --[[------------------------------------------------------------------
@@ -702,7 +702,7 @@ local function EAFun_CheckSpellConditionOverGrow(EA_count, EAItems)
 	if (EAItems ~= nil) then
 		if (EAItems.overgrow ~= nil) then SC_OverGrow = EAItems.overgrow end;
 	end
-	if (EA_count <= 0) then EA_count = 1 end;
+	if (EA_count and EA_count <= 0) then EA_count = 1 end;
 	if (SC_OverGrow ~= nil and SC_OverGrow > 0) then
 		if (SC_OverGrow <= EA_count) then isOverGrow = true end;
 	end
@@ -806,9 +806,7 @@ function EventAlert_Buffs_Update(...)
 			EA_SPELLINFO_SELF[spellID].isDebuff = false;
 			EA_SPELLINFO_SELF[spellID].orderWtd = orderWtd;
 			EA_SPELLINFO_SELF[spellID].value = {value1, value2, value3}
-			--EA_SPELLINFO_SELF[spellID].value1 = value1;
-			--EA_SPELLINFO_SELF[spellID].value2 = value2;
-			--EA_SPELLINFO_SELF[spellID].value3 = value3;
+			EA_SPELLINFO_SELF[spellID].aura = true
 			tinsert(buffsCurrent, spellID);
 		end
 	end
@@ -868,10 +866,8 @@ function EventAlert_Buffs_Update(...)
 			EA_SPELLINFO_SELF[spellID].unitCaster = unitCaster;
 			EA_SPELLINFO_SELF[spellID].isDebuff = false;
 			EA_SPELLINFO_SELF[spellID].orderWtd = orderWtd;
-			EA_SPELLINFO_SELF[spellID].value = {value1, value2, value3}
-			--EA_SPELLINFO_SELF[spellID].value1 = value1;
-			--EA_SPELLINFO_SELF[spellID].value2 = value2;
-			--EA_SPELLINFO_SELF[spellID].value3 = value3;
+			EA_SPELLINFO_SELF[spellID].value = {value1, value2, value3}			
+			EA_SPELLINFO_SELF[spellID].aura = true
 			tinsert(buffsCurrent, spellID);
 		end
 	end
@@ -929,9 +925,7 @@ function EventAlert_Buffs_Update(...)
 			EA_SPELLINFO_SELF[spellID].isDebuff = true;
 			EA_SPELLINFO_SELF[spellID].orderWtd = orderWtd;
 			EA_SPELLINFO_SELF[spellID].value = {value1,value2,value3}
-			--EA_SPELLINFO_SELF[spellID].value1 = value1;
-			--EA_SPELLINFO_SELF[spellID].value2 = value2;
-			--EA_SPELLINFO_SELF[spellID].value3 = value3;
+			EA_SPELLINFO_SELF[spellID].aura = true
 			tinsert(buffsCurrent, spellID);
 		end
 	end
@@ -991,14 +985,12 @@ function EventAlert_Buffs_Update(...)
 			EA_SPELLINFO_SELF[spellID].isDebuff = true
 			EA_SPELLINFO_SELF[spellID].orderWtd = orderWtd
 			EA_SPELLINFO_SELF[spellID].value = {value1, value2, value3}
-			--EA_SPELLINFO_SELF[spellID].value1 = value1;
-			--EA_SPELLINFO_SELF[spellID].value2 = value2;
-			--EA_SPELLINFO_SELF[spellID].value3 = value3;
+			EA_SPELLINFO_SELF[spellID].aura = true
 			tinsert(buffsCurrent, spellID);
 		end
 	end
 	
-
+	
 	--針對圖騰類法術進行偵測（如力之符文、屈心魔、邪DK華爾琪）
 	local timestp, event, hideCaster, surGUID, surName, surFlags, surRaidFlags, dstGUID, dstName, dstFlags, dstRaidFlags, spellID, spellName = ...
 	
@@ -1034,7 +1026,7 @@ function EventAlert_Buffs_Update(...)
 	end
 	
 	
-	for i,s in pairs(EA_CurrentBuffs) do 		
+	for _ ,s in pairs(EA_CurrentBuffs) do 		
 		
 		if EA_SPELLINFO_SELF[s] then 		
 			local t = EA_SPELLINFO_SELF[s].totem 			
@@ -1044,6 +1036,85 @@ function EventAlert_Buffs_Update(...)
 					tinsert(buffsCurrent, s)
 				else
 					EA_SPELLINFO_SELF[s].totem = nil
+					tinsert(buffsToDelete, s)
+				end			
+			end
+		end		
+	end	
+	
+	
+	-----------------------------------	
+	local function GetSpellEffectDuration(spellID)	
+			local spellDescription = GetSpellDescription(spellID)			
+			local spellEffectDuration
+			local MUL_MIN = 1
+			if not(spellEffectDuration) then
+				spellEffectDuration = string.match(spellDescription,EA_XCMD_SPELL_DURATION_PATTERN1)				
+			end
+			if not(spellEffectDuration) then
+				spellEffectDuration = string.match(spellDescription,EA_XCMD_SPELL_DURATION_PATTERN2)				
+			end
+			if not(spellEffectDuration) then
+				spellEffectDuration = string.match(spellDescription,EA_XCMD_SPELL_DURATION_PATTERN3)
+				MUL_MIN = 60
+			end
+			if not(spellEffectDuration) then
+				spellEffectDuration = string.match(spellDescription,EA_XCMD_SPELL_DURATION_PATTERN4)				
+				MUL_MIN = 60
+			end
+			if spellEffectDuration then
+				spellEffectDuration = tonumber(string.match(spellEffectDuration,"%d+%p?%d*"))*MUL_MIN
+			end
+			return spellEffectDuration 
+	end		
+	
+	local timestp, event, hideCaster, surGUID, surName, surFlags, surRaidFlags, dstGUID, dstName, dstFlags, dstRaidFlags, spellID, spellName = ...
+	if surGUID == UnitGUID("player") then unitCaster = "player" end
+	if (spellID) and (unitCaster == "player") then		
+		if (event == "SPELL_AURA_APPLIED") or (event == "SPELL_AURA_REFRESH") then	
+			if EA_SPELLINFO_SELF[spellID] then
+				EA_SPELLINFO_SELF[spellID].aura = true	
+			end
+			if EA_SPELLINFO_TARGET[spellID] then
+				EA_SPELLINFO_TARGET[spellID].aura = true	
+			end
+		end
+	
+		ifAdd_buffCur = false
+		
+		SpellEnable = EAFun_GetSpellItemEnable(PlayerItems[spellID])	
+		if (SpellEnable) then					
+			ifAdd_buffCur, orderWtd = EAFun_CheckSpellConditionMatch(count, unitCaster, PlayerItems[spellID])	
+		end		
+		local EffectDuration = tonumber(GetSpellEffectDuration(spellID))		
+		if (ifAdd_buffCur) then		
+			if (event == "SPELL_CAST_SUCCESS") and EffectDuration then 				
+				if not(EA_SPELLINFO_SELF[spellID].aura) then
+					EA_SPELLINFO_SELF[spellID].name = spellName
+					EA_SPELLINFO_SELF[spellID].icon = GetSpellTexture(spellID)
+					EA_SPELLINFO_SELF[spellID].count = 0
+					EA_SPELLINFO_SELF[spellID].duration = 	EffectDuration
+					EA_SPELLINFO_SELF[spellID].expirationTime = GetTime() + EffectDuration
+					EA_SPELLINFO_SELF[spellID].unitCaster = unitCaster
+					EA_SPELLINFO_SELF[spellID].isDebuff = false
+					EA_SPELLINFO_SELF[spellID].orderWtd = orderWtd
+					EA_SPELLINFO_SELF[spellID].spellcast = true
+					tinsert(buffsCurrent, spellID)
+				end
+			
+			end
+		end
+	end
+	
+	for _,s in pairs(EA_CurrentBuffs) do 		
+		
+		if EA_SPELLINFO_SELF[s] then 		
+			local spellcast = EA_SPELLINFO_SELF[s].spellcast
+			if spellcast then					
+				if  GetTime() < EA_SPELLINFO_SELF[s].expirationTime then			
+					tinsert(buffsCurrent, s)
+				else
+					EA_SPELLINFO_SELF[s].spellcast = false
 					tinsert(buffsToDelete, s)
 				end			
 			end
@@ -1198,9 +1269,7 @@ function EventAlert_TarBuffs_Update(...)
 				EA_SPELLINFO_TARGET[spellID].isDebuff = true
 				EA_SPELLINFO_TARGET[spellID].orderWtd = orderWtd
 				EA_SPELLINFO_TARGET[spellID].value = {value1,value2,value3}
-				--EA_SPELLINFO_TARGET[spellID].value1 = value1;
-				--EA_SPELLINFO_TARGET[spellID].value2 = value2;
-				--EA_SPELLINFO_TARGET[spellID].value3 = value3;				
+				EA_SPELLINFO_TARGET[spellID].aura = true
 				tinsert(buffsCurrent, spellID)
 		end		
 	end
@@ -1251,12 +1320,11 @@ function EventAlert_TarBuffs_Update(...)
 				EA_SPELLINFO_TARGET[spellID].isDebuff = false
 				EA_SPELLINFO_TARGET[spellID].orderWtd = orderWtd
 				EA_SPELLINFO_TARGET[spellID].value = {value1,value2,value3}
-				--EA_SPELLINFO_TARGET[spellID].value1 = value1;
-				--EA_SPELLINFO_TARGET[spellID].value2 = value2;
-				--EA_SPELLINFO_TARGET[spellID].value3 = value3;
+				EA_SPELLINFO_TARGET[spellID].aura = true
 				tinsert(buffsCurrent, spellID)
 		end
 end
+	
 
 	-- Check: Buff dropped
 	local v1 = table.foreach(EA_TarCurrentBuffs,
@@ -1322,8 +1390,10 @@ end
 --------------------------------------------------------------------]]
 function EventAlert_ScdBuffs_Update(EA_Unit, EA_SpellName, EA_spellID, EA_timestp)
 		local spellID = tonumber(EA_spellID)
+		local spellDescription = GetSpellDescription(spellID)
 		local sSpellLink = ""
 		local SpellEnable = false
+		
 		
 		local ScdItems = EA_ScdItems[EA_playerClass]
 		-- DEFAULT_CHAT_FRAME:AddMessage("spellID="..spellID.." / EA_SpellName="..EA_SpellName);
@@ -1535,22 +1605,21 @@ end
 function EventAlert_OnUpdate(spellID)
 	local tonumber = tonumber
 	local IsUsableSpell = IsUsableSpell	
-	local EA_SPELLINFO_SELF = EA_SPELLINFO_SELF
+	--local EA_SPELLINFO_SELF = EA_SPELLINFO_SELF
 	local PlayerItems = EA_Items[EA_playerClass]
-	local OtherItems = EA_Items[EA_CLASS_OTHER]
+	local OtherItems = EA_Items[EA_CLASS_OTHER]	
 	
-	
-	local timerFontSize = 0;
-	local SC_RedSecText, isOverGrow = -1, false;
+	local timerFontSize = 0
+	local SC_RedSecText, isOverGrow = -1, false
 
-	local v = tostring(spellID);
-	local eaf = _G["EAFrame_"..v];
-	spellID = tonumber(v);
+	local strSpellID = tostring(spellID)
+	local eaf = _G["EAFrame_"..strSpellID]
+	spellID = tonumber(strSpellID)
 	local name = EA_SPELLINFO_SELF[spellID].name	
 	
 	if (EA_Config.AllowAltAlerts == true) then
 		
-		for s,v in pairs(AltItems) do
+		for s,v in pairs(OtherItems) do
 			--local SpellEnable = EAFun_GetSpellItemEnable(EA_AltItems[EA_playerClass][spellID])
 			local SpellEnable = v.enable
 			
@@ -1945,7 +2014,7 @@ function EventAlert_TarPositionFrames()
 		local tonumber = tonumber
 		local EA_SPELLINFO_TARGET = EA_SPELLINFO_TARGET		
 		local IconSize = EA_Config.IconSize
-		local ShowAuraValueWhenOver=EA_Config.ShowAuraValueWhenOver
+		local ShowAuraValueWhenOver = EA_Config.ShowAuraValueWhenOver
 		for k,v in ipairs(EA_TarCurrentBuffs) do
 			local eaf = _G["EATarFrame_"..v];
 			local spellID = tonumber(v);
@@ -2030,7 +2099,7 @@ function EventAlert_TarPositionFrames()
 					eaf.spellName:SetText("");
 				end
 				eaf.spellTimer:SetFont("Fonts\\FRIZQT__.TTF", EA_Config.TimerFontSize, "OUTLINE");
-				eaf.spellStack:SetFont("Fonts\\FRIZQT__.TTF", EA_Config.StackFontSize, "OUTLINE");
+				--eaf.spellStack:SetFont("Fonts\\FRIZQT__.TTF", EA_Config.StackFontSize, "OUTLINE");
 				eaf:SetScript("OnUpdate", function(self,elapsedTime)
 					EventAlert_TimeSinceUpdate_Target = EventAlert_TimeSinceUpdate_Target + elapsedTime
 					if EventAlert_TimeSinceUpdate_Target > EventAlert_UpdateInterval then
@@ -2715,7 +2784,7 @@ function EAFun_SetCountdownStackText(eaf, EA_timeLeft, EA_count, SC_RedSecText)
 	eaf.spellStack:ClearAllPoints();
 	--if (EA_count > 0) then
 	--計數值大於1才顯示
-	if (EA_count > 1) then
+	if (EA_count and EA_count > 1) then
 		
 		eaf.spellStack:SetPoint("BOTTOMRIGHT", eaf, "BOTTOMRIGHT", -eaf:GetWidth() * 0.0 , eaf:GetHeight() * 0.03)
 		--eaf.spellStack:SetTextColor(1, 1, 1);			--設定堆疊數字顏色為白色
